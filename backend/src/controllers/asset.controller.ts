@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { AssetService } from '../services/asset.service';
+import { HistoryService } from '../services/history.service';
 
 export class AssetController {
   static async getAssets(req: AuthenticatedRequest, res: Response) {
@@ -79,6 +80,33 @@ export class AssetController {
     try {
       const result = await AssetService.deleteAsset(req.params.id, req.user!.userId);
       return res.status(200).json({ success: true, data: result, message: result.message });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getDepartments(_req: AuthenticatedRequest, res: Response) {
+    try {
+      const departments = await AssetService.getDistinctDepartments();
+      return res.status(200).json({ success: true, data: departments });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getAssetHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const history = await HistoryService.getAssetHistory(req.params.id, req.query);
+      return res.status(200).json({ success: true, data: history });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getGlobalHistory(req: AuthenticatedRequest, res: Response) {
+    try {
+      const history = await HistoryService.getGlobalHistory(req.query);
+      return res.status(200).json({ success: true, data: history });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: error.message });
     }

@@ -70,15 +70,20 @@ enum MaintenanceStatus {
 
 enum AssetAction {
   CREATED
+  ASSET_CREATED
   ASSIGNED
   TRANSFERRED
   RETURNED
+  LOCATION_CHANGED
+  DEPARTMENT_CHANGED
+  HOLDER_CHANGED
   STATUS_CHANGED
   CONDITION_CHANGED
-  LOCATION_CHANGED
-  HOLDER_CHANGED
   MAINTENANCE_STARTED
   MAINTENANCE_COMPLETED
+  DAMAGED
+  LOST
+  FOUND
   RETIRED
   SCRAPPED
 }
@@ -179,6 +184,7 @@ model User {
   receivedReturns      AssetReturn[]     @relation("ReceivedByReturnRelation")
   reportedMaintenance MaintenanceRecord[] @relation("ReportedByMaintenanceRelation")
   historyPerformed     AssetStatusHistory[] @relation("PerformedByRelation")
+  historyApproved      AssetStatusHistory[] @relation("ApprovedByHistoryRelation")
   importBatches        ImportBatch[]
 }
 
@@ -195,6 +201,8 @@ model Department {
   assets    Asset[]
   previousTransfers AssetTransfer[] @relation("PreviousDeptRelation")
   newTransfers      AssetTransfer[] @relation("NewDeptRelation")
+  previousHistory   AssetStatusHistory[] @relation("PreviousDeptHistoryRelation")
+  newHistory        AssetStatusHistory[] @relation("NewDeptHistoryRelation")
 }
 
 model Location {
@@ -210,6 +218,8 @@ model Location {
   assets    Asset[]
   previousTransfers AssetTransfer[] @relation("PreviousLocRelation")
   newTransfers      AssetTransfer[] @relation("NewLocRelation")
+  previousHistory   AssetStatusHistory[] @relation("PreviousLocationHistoryRelation")
+  newHistory        AssetStatusHistory[] @relation("NewLocationHistoryRelation")
 }
 
 model Employee {
@@ -463,24 +473,52 @@ model MaintenancePart {
 }
 
 model AssetStatusHistory {
-  id               String         @id @default(uuid())
-  assetId          String
-  asset            Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  action           AssetAction
-  previousStatus   AssetStatus?
-  newStatus        AssetStatus?
-  previousHolderId String?
-  previousHolder   Employee?      @relation("PrevHolderHistoryRelation", fields: [previousHolderId], references: [id])
-  newHolderId      String?
-  newHolder        Employee?      @relation("NewHolderHistoryRelation", fields: [newHolderId], references: [id])
-  performedById    String?
-  performedBy      User?          @relation("PerformedByRelation", fields: [performedById], references: [id])
-  remarks          String?
-  createdAt        DateTime       @default(now())
+  id                     String            @id @default(uuid())
+  assetId                String
+  asset                  Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  action                 AssetAction
+  previousStatus         AssetStatus?
+  newStatus              AssetStatus?
+  previousHolderId       String?
+  previousHolder         Employee?         @relation("PrevHolderHistoryRelation", fields: [previousHolderId], references: [id])
+  previousHolderName     String?
+  newHolderId            String?
+  newHolder              Employee?         @relation("NewHolderHistoryRelation", fields: [newHolderId], references: [id])
+  newHolderName          String?
+  previousDepartmentId   String?
+  previousDepartment     Department?       @relation("PreviousDeptHistoryRelation", fields: [previousDepartmentId], references: [id])
+  previousDepartmentName String?
+  newDepartmentId        String?
+  newDepartment          Department?       @relation("NewDeptHistoryRelation", fields: [newDepartmentId], references: [id])
+  newDepartmentName      String?
+  previousLocationId     String?
+  previousLocation       Location?         @relation("PreviousLocationHistoryRelation", fields: [previousLocationId], references: [id])
+  previousLocationName   String?
+  newLocationId          String?
+  newLocation            Location?         @relation("NewLocationHistoryRelation", fields: [newLocationId], references: [id])
+  newLocationName        String?
+  previousCondition      AssetCondition?
+  newCondition           AssetCondition?
+  performedById          String?
+  performedBy            User?             @relation("PerformedByRelation", fields: [performedById], references: [id])
+  performedByName        String?
+  approvedById           String?
+  approvedBy             User?             @relation("ApprovedByHistoryRelation", fields: [approvedById], references: [id])
+  approvedByName         String?
+  eventDate              DateTime          @default(now())
+  reason                 String?
+  remarks                String?
+  metadata               String?
+  createdAt              DateTime          @default(now())
 
   @@index([assetId])
   @@index([action])
+  @@index([eventDate])
   @@index([createdAt])
+  @@index([performedById])
+  @@index([newHolderId])
+  @@index([newDepartmentId])
+  @@index([newLocationId])
 }
 
 model AuditLog {

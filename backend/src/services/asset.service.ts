@@ -1,6 +1,7 @@
 import prisma from '../config/prisma';
 import { AssetStatus, AssetCondition, WorkflowStatus, MaintenanceStatus, AssetAction, AllocationStatus, Prisma } from '@prisma/client';
 import { AssetCreateSchema, AssetUpdateSchema, AssetAssignmentSchema, AssetTransferSchema, AssetReturnSchema, MaintenanceCreateSchema } from '../validators/schemas';
+import { HistoryService } from './history.service';
 
 export class AssetService {
   // Helper for generating sequential asset codes AST-000001
@@ -66,6 +67,8 @@ export class AssetService {
     dataQualityStatus?: string;
     holderType?: string;
     sourceAssetStatus?: string;
+    department?: string;
+    departmentOrArea?: string;
   }) {
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 10;
@@ -84,6 +87,21 @@ export class AssetService {
     if (query.dataQualityStatus) where.dataQualityStatus = query.dataQualityStatus as any;
     if (query.holderType) where.holderType = query.holderType as any;
     if (query.sourceAssetStatus) where.sourceAssetStatus = { equals: query.sourceAssetStatus, mode: 'insensitive' };
+
+    const deptFilter = query.department || query.departmentOrArea;
+    if (deptFilter && deptFilter.trim()) {
+      const d = deptFilter.trim();
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        {
+          OR: [
+            { location: { equals: d, mode: 'insensitive' } },
+            { department: { name: { equals: d, mode: 'insensitive' } } },
+            { departmentId: d },
+          ],
+        },
+      ];
+    }
 
     if (query.search) {
       const s = query.search.trim();
@@ -134,6 +152,28 @@ export class AssetService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  static async getDistinctDepartments(): Promise<string[]> {
+    const [locations, departments] = await Promise.all([
+      prisma.asset.findMany({
+        select: { location: true },
+        distinct: ['location'],
+      }),
+      prisma.department.findMany({
+        select: { name: true },
+      }),
+    ]);
+
+    const set = new Set<string>();
+    locations.forEach((l) => {
+      if (l.location && l.location.trim()) set.add(l.location.trim());
+    });
+    departments.forEach((d) => {
+      if (d.name && d.name.trim()) set.add(d.name.trim());
+    });
+
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }
 
   static async getAssetById(id: string) {
@@ -210,14 +250,19 @@ export class AssetService {
         },
       });
 
-      await tx.assetStatusHistory.create({
-        data: {
-          assetId: asset.id,
-          action: AssetAction.CREATED,
-          newStatus: asset.status,
-          performedById: userId,
-          remarks: `Asset created with code ${assetCode} (${companyAssetId})`,
-        },
+      await HistoryService.recordEvent(tx, {
+        assetId: asset.id,
+        action: AssetAction.ASSET_CREATED,
+        newStatus: asset.status,
+        newCondition: asset.condition,
+        newDepartmentId: asset.departmentId,
+        newDepartmentName: asset.department?.name || asset.location || 'IT STOCK',
+        newLocationId: asset.locationId,
+        newLocationName: asset.locationRel?.name || asset.location || 'IT Area',
+        newHolderName: 'IT STOCK',
+        performedById: userId,
+        eventDate: new Date(),
+        remarks: `Asset created with code ${assetCode} (${companyAssetId})`,
       });
 
       await tx.auditLog.create({
@@ -268,15 +313,26 @@ export class AssetService {
       });
 
       if (assetData.status && assetData.status !== existing.status) {
-        await tx.assetStatusHistory.create({
-          data: {
-            assetId: id,
-            action: AssetAction.STATUS_CHANGED,
-            previousStatus: existing.status,
-            newStatus: assetData.status,
-            performedById: userId,
-            remarks: `Status updated from ${existing.status} to ${assetData.status}`,
-          },
+        await HistoryService.recordEvent(tx, {
+          assetId: id,
+          action: AssetAction.STATUS_CHANGED,
+          previousStatus: existing.status,
+          newStatus: assetData.status,
+          performedById: userId,
+          eventDate: new Date(),
+          remarks: `Status updated from ${existing.status} to ${assetData.status}`,
+        });
+      }
+
+      if (assetData.condition && assetData.condition !== existing.condition) {
+        await HistoryService.recordEvent(tx, {
+          assetId: id,
+          action: AssetAction.CONDITION_CHANGED,
+          previousCondition: existing.condition,
+          newCondition: assetData.condition,
+          performedById: userId,
+          eventDate: new Date(),
+          remarks: `Condition updated from ${existing.condition} to ${assetData.condition}`,
         });
       }
 
@@ -439,16 +495,28 @@ export class AssetService {
         },
       });
 
-      await tx.assetStatusHistory.create({
-        data: {
-          assetId,
-          action: AssetAction.ASSIGNED,
-          previousStatus: asset.status,
-          newStatus: AssetStatus.ASSIGNED,
-          newHolderId: validated.employeeId,
-          performedById: userId,
-          remarks: `Assigned to employee ${employee.fullName} (${employee.employeeCode})`,
-        },
+      await HistoryService.recordEvent(tx, {
+        assetId,
+        action: AssetAction.ASSIGNED,
+        previousStatus: asset.status,
+        newStatus: AssetStatus.ASSIGNED,
+        previousHolderId: asset.currentHolderId,
+        previousHolderName: asset.employeeNameSource || 'IT STOCK',
+        newHolderId: validated.employeeId,
+        newHolderName: employee.fullName,
+        previousDepartmentId: asset.departmentId,
+        previousDepartmentName: asset.location,
+        newDepartmentId: employee.departmentId || asset.departmentId,
+        newDepartmentName: asset.location,
+        previousLocationId: asset.locationId,
+        previousLocationName: asset.location,
+        newLocationId: employee.locationId || asset.locationId,
+        newLocationName: asset.location,
+        previousCondition: asset.condition,
+        newCondition: validated.conditionAtAssignment || asset.condition,
+        performedById: userId,
+        eventDate: new Date(),
+        remarks: validated.remarks || `Assigned to employee ${employee.fullName} (${employee.employeeCode})`,
       });
 
       await tx.auditLog.create({
@@ -503,17 +571,35 @@ export class AssetService {
         },
       });
 
-      await tx.assetStatusHistory.create({
-        data: {
-          assetId,
-          action: AssetAction.TRANSFERRED,
-          previousStatus: asset.status,
-          newStatus: asset.status,
-          previousHolderId: asset.currentHolderId,
-          newHolderId: validated.newHolderId,
-          performedById: userId,
-          remarks: `Transferred to ${newHolder.fullName} (${newHolder.employeeCode})`,
-        },
+      const prevHolder = asset.currentHolderId ? await tx.employee.findUnique({ where: { id: asset.currentHolderId } }) : null;
+      const prevDept = asset.departmentId ? await tx.department.findUnique({ where: { id: asset.departmentId } }) : null;
+      const prevLoc = asset.locationId ? await tx.location.findUnique({ where: { id: asset.locationId } }) : null;
+      const targetDeptId = validated.newDepartmentId || newHolder.departmentId;
+      const newDept = targetDeptId ? await tx.department.findUnique({ where: { id: targetDeptId } }) : null;
+      const targetLocId = validated.newLocationId || newHolder.locationId;
+      const newLoc = targetLocId ? await tx.location.findUnique({ where: { id: targetLocId } }) : null;
+
+      await HistoryService.recordEvent(tx, {
+        assetId,
+        action: AssetAction.TRANSFERRED,
+        previousStatus: asset.status,
+        newStatus: asset.status,
+        previousHolderId: asset.currentHolderId,
+        previousHolderName: prevHolder?.fullName || asset.employeeNameSource || 'IT STOCK',
+        newHolderId: validated.newHolderId,
+        newHolderName: newHolder.fullName,
+        previousDepartmentId: asset.departmentId,
+        previousDepartmentName: prevDept?.name || asset.location,
+        newDepartmentId: targetDeptId || null,
+        newDepartmentName: newDept?.name || prevDept?.name || asset.location,
+        previousLocationId: asset.locationId,
+        previousLocationName: prevLoc?.name || asset.location,
+        newLocationId: targetLocId || null,
+        newLocationName: newLoc?.name || prevLoc?.name || asset.location,
+        performedById: userId,
+        eventDate: new Date(),
+        reason: validated.reason,
+        remarks: validated.remarks || `Transferred to ${newHolder.fullName} (${newHolder.employeeCode})`,
       });
 
       await tx.auditLog.create({
@@ -572,17 +658,25 @@ export class AssetService {
         },
       });
 
-      await tx.assetStatusHistory.create({
-        data: {
-          assetId,
-          action: AssetAction.RETURNED,
-          previousStatus: asset.status,
-          newStatus: nextStatus,
-          previousHolderId,
-          newHolderId: null,
-          performedById: userId,
-          remarks: `Returned by employee. Accessories returned: ${validated.accessoriesReturned}. Damage reported: ${validated.damageReported}`,
-        },
+      const prevHolder = previousHolderId ? await tx.employee.findUnique({ where: { id: previousHolderId } }) : null;
+      const prevDept = asset.departmentId ? await tx.department.findUnique({ where: { id: asset.departmentId } }) : null;
+
+      await HistoryService.recordEvent(tx, {
+        assetId,
+        action: AssetAction.RETURNED,
+        previousStatus: asset.status,
+        newStatus: nextStatus,
+        previousHolderId,
+        previousHolderName: prevHolder?.fullName || 'Employee',
+        newHolderName: 'IT STOCK',
+        previousDepartmentId: asset.departmentId,
+        previousDepartmentName: prevDept?.name || asset.location,
+        newDepartmentName: 'IT STOCK',
+        previousCondition: asset.condition,
+        newCondition: validated.conditionAtReturn,
+        performedById: userId,
+        eventDate: new Date(),
+        remarks: `Returned by employee. Accessories returned: ${validated.accessoriesReturned}. Damage reported: ${validated.damageReported}${validated.remarks ? ' | ' + validated.remarks : ''}`,
       });
 
       await tx.auditLog.create({
@@ -624,15 +718,17 @@ export class AssetService {
         data: { status: AssetStatus.UNDER_REPAIR },
       });
 
-      await tx.assetStatusHistory.create({
-        data: {
-          assetId: validated.assetId,
-          action: AssetAction.MAINTENANCE_STARTED,
-          previousStatus: asset.status,
-          newStatus: AssetStatus.UNDER_REPAIR,
-          performedById: userId,
-          remarks: `Maintenance started: ${validated.issueTitle}`,
-        },
+      await HistoryService.recordEvent(tx, {
+        assetId: validated.assetId,
+        action: AssetAction.MAINTENANCE_STARTED,
+        previousStatus: asset.status,
+        newStatus: AssetStatus.UNDER_REPAIR,
+        previousHolderId: asset.currentHolderId,
+        previousHolderName: asset.employeeNameSource || 'IT STOCK',
+        performedById: userId,
+        eventDate: new Date(),
+        reason: validated.issueTitle,
+        remarks: `${validated.issueDescription || ''} (Technician: ${validated.technician || 'N/A'}, Cost: ₹${validated.repairCost || 0})`,
       });
 
       await tx.auditLog.create({

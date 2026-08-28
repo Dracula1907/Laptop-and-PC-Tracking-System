@@ -19,12 +19,12 @@ import {
   Edit,
   Trash2,
   QrCode,
-  Download,
   UploadCloud,
   FileSpreadsheet,
   CheckCircle2,
   AlertTriangle,
   XCircle,
+  RotateCcw,
 } from 'lucide-react';
 
 export const AssetList: React.FC = () => {
@@ -40,10 +40,12 @@ export const AssetList: React.FC = () => {
   // Filters
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
   const [assetType, setAssetType] = useState<string>(searchParams.get('assetType') || '');
+  const [department, setDepartment] = useState<string>(searchParams.get('department') || '');
   const [sourceAssetStatus, setSourceAssetStatus] = useState<string>(searchParams.get('sourceAssetStatus') || '');
   const [allocationStatus, setAllocationStatus] = useState<string>(searchParams.get('allocationStatus') || '');
   const [criticality, setCriticality] = useState<string>(searchParams.get('criticality') || '');
   const [dataQualityStatus, setDataQualityStatus] = useState<string>(searchParams.get('dataQualityStatus') || '');
+  const [departments, setDepartments] = useState<string[]>([]);
 
   // QR Modal
   const [selectedQRAsset, setSelectedQRAsset] = useState<Asset | null>(null);
@@ -79,6 +81,7 @@ export const AssetList: React.FC = () => {
       query.set('limit', '10');
       if (search) query.set('search', search);
       if (assetType) query.set('assetType', assetType);
+      if (department) query.set('department', department);
       if (sourceAssetStatus) query.set('sourceAssetStatus', sourceAssetStatus);
       if (allocationStatus) query.set('allocationStatus', allocationStatus);
       if (criticality) query.set('criticality', criticality);
@@ -99,25 +102,33 @@ export const AssetList: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchAssets(1);
-  }, [search, assetType, sourceAssetStatus, allocationStatus, criticality, dataQualityStatus]);
+    const fetchDepts = async () => {
+      try {
+        const res: any = await api.get('/assets/departments');
+        const isSuccess = res?.success ?? res?.data?.success;
+        const data = res?.data ?? res;
+        if (isSuccess && Array.isArray(data)) {
+          setDepartments(data);
+        }
+      } catch (err) {
+        console.error('Failed to load departments:', err);
+      }
+    };
+    fetchDepts();
+  }, []);
 
-  const handleDownloadCompanyExcel = async () => {
-    try {
-      const res = await api.get('/import/export-company-excel', {
-        responseType: 'blob',
-      });
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `company_it_assets_${new Date().toISOString().slice(0, 10)}.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      addToast('Company Excel inventory downloaded successfully.', 'success');
-    } catch {
-      addToast('Failed to download company Excel inventory.', 'error');
-    }
+  useEffect(() => {
+    fetchAssets(1);
+  }, [search, assetType, department, sourceAssetStatus, allocationStatus, criticality, dataQualityStatus]);
+
+  const clearAllFilters = () => {
+    setSearch('');
+    setAssetType('');
+    setDepartment('');
+    setSourceAssetStatus('');
+    setAllocationStatus('');
+    setCriticality('');
+    setDataQualityStatus('');
   };
 
   const columns: Column<Asset>[] = [
@@ -224,11 +235,14 @@ export const AssetList: React.FC = () => {
     {
       key: 'department',
       header: 'Department / Area',
-      render: (item) => (
-        <span className="text-xs text-textSecondary font-medium">
-          {item.department?.name || item.location?.name || '—'}
-        </span>
-      ),
+      render: (item) => {
+        const areaStr = typeof item.location === 'string' ? item.location : (item.location as any)?.name;
+        return (
+          <span className="text-xs text-textSecondary font-medium">
+            {item.department?.name || areaStr || '—'}
+          </span>
+        );
+      },
     },
     {
       key: 'specs',
@@ -327,10 +341,6 @@ export const AssetList: React.FC = () => {
               <FileSpreadsheet className="w-4 h-4 mr-2 text-emerald-400" />
               Export Excel
             </Button>
-            <Button variant="secondary" onClick={handleDownloadCompanyExcel}>
-              <Download className="w-4 h-4 mr-2" />
-              Company 16-Col
-            </Button>
             <Button variant="secondary" onClick={() => navigate('/imports')}>
               <UploadCloud className="w-4 h-4 mr-2" />
               Import Excel
@@ -345,7 +355,7 @@ export const AssetList: React.FC = () => {
       />
 
       {/* Filter Toolbar */}
-      <div className="bg-bgElevated border border-borderBase rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+      <div className="bg-bgElevated border border-borderBase rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 items-center">
         <div className="lg:col-span-2">
           <SearchInput
             value={search}
@@ -353,6 +363,15 @@ export const AssetList: React.FC = () => {
             placeholder="Search Asset ID (FAA-001), S/N, Holder, IP, CPU, Area..."
           />
         </div>
+
+        <Select
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          options={[
+            { value: '', label: 'All Departments / Areas' },
+            ...departments.map((d) => ({ value: d, label: d })),
+          ]}
+        />
 
         <Select
           value={assetType}
@@ -387,16 +406,29 @@ export const AssetList: React.FC = () => {
           ]}
         />
 
-        <Select
-          value={dataQualityStatus}
-          onChange={(e) => setDataQualityStatus(e.target.value)}
-          options={[
-            { value: '', label: 'All Data Quality' },
-            { value: 'CLEAN', label: 'Clean' },
-            { value: 'WARNING', label: 'Warnings' },
-            { value: 'NEEDS_REVIEW', label: 'Needs Review' },
-          ]}
-        />
+        <div className="flex items-center gap-2">
+          <Select
+            value={dataQualityStatus}
+            onChange={(e) => setDataQualityStatus(e.target.value)}
+            options={[
+              { value: '', label: 'All Data Quality' },
+              { value: 'CLEAN', label: 'Clean' },
+              { value: 'WARNING', label: 'Warnings' },
+              { value: 'NEEDS_REVIEW', label: 'Needs Review' },
+            ]}
+          />
+          {(search || assetType || department || allocationStatus || sourceAssetStatus || dataQualityStatus) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              title="Clear all active filters"
+              className="text-xs text-[#7B8490] hover:text-white shrink-0 px-2 py-2 border border-[#313C4A] rounded-lg"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Data Table */}
