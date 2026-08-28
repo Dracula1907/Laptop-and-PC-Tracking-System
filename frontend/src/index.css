@@ -43,6 +43,218 @@
   }
 }
 
+/* Smooth 200ms transition for theme switching */
+html, body, aside, header, footer, main, nav,
+div, button, input, select, textarea, table, th, td {
+  transition: background-color 200ms ease, border-color 200ms ease, color 200ms ease, box-shadow 200ms ease;
+}
+
+/* Base Light Mode variables and overrides */
+html.light {
+  --bg-deep: #F1F5F9;
+  --bg-darkest: #E2E8F0;
+  --bg-graphite-1: #FFFFFF;
+  --bg-graphite-2: #F8FAFC;
+  --bg-graphite-3: #E2E8F0;
+  --border-steel-1: #CBD5E1;
+  --border-steel-2: #94A3B8;
+  
+  --steel-muted: #64748B;
+  --steel-light: #475569;
+  --text-sub: #475569;
+  --text-light: #1E293B;
+  --text-white: #0F172A;
+
+  color-scheme: light;
+}
+
+/* Global Light Mode Layout Overrides */
+html.light body {
+  background-color: #F1F5F9 !important;
+  color: #1E293B !important;
+}
+
+html.light aside {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+}
+
+html.light header {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+}
+
+html.light footer {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  color: #64748B !important;
+}
+
+/* Layout container backgrounds */
+html.light .bg-\[\#030309\] {
+  background-color: #F1F5F9 !important;
+}
+
+html.light .bg-\[\#0A0D14\]\/96,
+html.light .bg-\[\#0A0D14\],
+html.light .bg-\[\#0E121B\],
+html.light .bg-\[\#0E121B\]\/60 {
+  background-color: #FFFFFF !important;
+}
+
+html.light .bg-\[\#191E27\],
+html.light .bg-\[\#121624\],
+html.light .bg-\[\#13182A\],
+html.light .bg-\[\#080E1C\] {
+  background-color: #F8FAFC !important;
+}
+
+/* Borders */
+html.light .border-\[\#1E2535\],
+html.light .border-\[\#232C38\],
+html.light .border-\[\#313C4A\],
+html.light .border-\[\#2B3550\],
+html.light .border-\[\#192A45\],
+html.light .border-\[\#1E3354\],
+html.light .border-\[\#243040\],
+html.light .border-\[\#1C2840\],
+html.light .border-borderDark {
+  border-color: #E2E8F0 !important;
+}
+
+/* Typography in Light Mode */
+html.light .text-white {
+  color: #0F172A !important;
+}
+
+html.light .text-\[\#CED1D5\],
+html.light .text-textPrimary {
+  color: #1E293B !important;
+}
+
+html.light .text-\[\#7B8490\],
+html.light .text-\[\#58707A\],
+html.light .text-textSecondary,
+html.light .text-slate-400,
+html.light .text-slate-500 {
+  color: #475569 !important;
+}
+
+/* Light Mode Cards, Surfaces, and Panels */
+html.light .bg-surface {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .bg-surfaceElevated,
+html.light .bg-surfaceElevated\/60 {
+  background-color: #F8FAFC !important;
+  border-color: #E2E8F0 !important;
+}
+
+html.light .bg-bgBase {
+  background-color: #F1F5F9 !important;
+}
+
+html.light .telemetry-card {
+  background: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Light mode for Dashboard glass panels */
+html.light div[style*="rgba(8,12,20"],
+html.light div[style*="rgba(8, 12, 20"] {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Light mode for Dashboard background image overlay */
+html.light .dashboard-bg-overlay {
+  background: rgba(241, 245, 249, 0.90) !important;
+}
+
+/* Light Mode Inputs, Selects, and Search */
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: #FFFFFF !important;
+  border-color: #CBD5E1 !important;
+  color: #0F172A !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94A3B8 !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: #6366F1 !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+}
+
+/* Light Mode Tables */
+html.light table {
+  background-color: #FFFFFF !important;
+}
+
+html.light thead tr {
+  background-color: #F8FAFC !important;
+  border-color: #E2E8F0 !important;
+}
+
+html.light th {
+  color: #475569 !important;
+}
+
+html.light tbody tr {
+  border-color: #E2E8F0 !important;
+}
+
+html.light tbody tr:hover {
+  background-color: #F8FAFC !important;
+}
+
+/* Light Mode Modals & Dropdowns */
+html.light div[role="dialog"],
+html.light .modal-box {
+  background-color: #FFFFFF !important;
+  border-color: #E2E8F0 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Light Mode Nav items */
+html.light nav a:not([class*="bg-gradient"]) {
+  color: #475569 !important;
+}
+
+html.light nav a:not([class*="bg-gradient"]):hover {
+  background-color: #F1F5F9 !important;
+  color: #0F172A !important;
+}
+
+html.light nav a[class*="bg-gradient"] {
+  background: linear-gradient(to right, #EEF2FF, #E0E7FF) !important;
+  border-color: #C7D2FE !important;
+  color: #4338CA !important;
+  box-shadow: 0 1px 3px rgba(99, 102, 241, 0.15) !important;
+}
+
+/* Light Mode Scrollbars */
+html.light ::-webkit-scrollbar-track {
+  background: #F1F5F9;
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
 /* Industrial Telemetry Metallic Card Material */
 .telemetry-card {
   background: linear-gradient(180deg, rgba(25, 30, 39, 0.95) 0%, rgba(14, 18, 27, 0.98) 100%);

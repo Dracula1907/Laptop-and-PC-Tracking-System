@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   LogOut,
-  Server,
-  Database,
   Search,
   ChevronDown,
   Menu,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import api from '../services/api';
-import { SystemHealth, Notification } from '../types';
+import { Notification } from '../types';
 
 interface HeaderProps {
   collapsed: boolean;
@@ -20,9 +21,9 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ collapsed, setCollapsed }) => {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
-  const [health, setHealth] = useState<SystemHealth | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [showNotifications, setShowNotifications] = useState<boolean>(false);
@@ -30,17 +31,6 @@ export const Header: React.FC<HeaderProps> = ({ collapsed, setCollapsed }) => {
   const [globalSearch, setGlobalSearch] = useState<string>('');
 
   useEffect(() => {
-    const fetchHealth = async () => {
-      try {
-        const res: any = await api.get('/health');
-        if (res?.success ?? res?.data?.success) {
-          setHealth(res.data || res);
-        }
-      } catch {
-        setHealth({ api: 'HEALTHY', database: 'HEALTHY', environment: 'production', version: 'v1.0.0', timestamp: '' });
-      }
-    };
-
     const fetchNotifications = async () => {
       if (!user) return;
       try {
@@ -54,11 +44,9 @@ export const Header: React.FC<HeaderProps> = ({ collapsed, setCollapsed }) => {
       } catch {}
     };
 
-    fetchHealth();
     fetchNotifications();
 
     const interval = setInterval(() => {
-      fetchHealth();
       fetchNotifications();
     }, 30000);
 
@@ -81,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({ collapsed, setCollapsed }) => {
   };
 
   return (
-    <header className="h-14 bg-[#0E121B] border-b border-[#232C38] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30">
+    <header className="h-16 bg-[#0E121B] border-b border-[#232C38] flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30 transition-colors duration-200">
       {/* Left: Mobile collapse toggle & Global Search */}
       <div className="flex items-center space-x-3 flex-1 max-w-xl">
         <button
@@ -103,13 +91,28 @@ export const Header: React.FC<HeaderProps> = ({ collapsed, setCollapsed }) => {
         </form>
       </div>
 
-      {/* Right: Notifications, User Avatar */}
+      {/* Right: Theme Toggle, Notifications, User Avatar */}
       <div className="flex items-center space-x-2.5 sm:space-x-3.5">
+        {/* Theme Toggle Button */}
+        <button
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          className="w-8 h-8 rounded-lg bg-[#191E27] border border-[#313C4A] hover:border-[#4D525E] flex items-center justify-center text-[#7B8490] hover:text-white transition-colors relative focus:outline-none focus:ring-1 focus:ring-cyan-400/50"
+        >
+          {theme === 'dark' ? (
+            <Sun className="w-4 h-4 text-amber-400 hover:text-amber-300 transition-colors" />
+          ) : (
+            <Moon className="w-4 h-4 text-indigo-500 hover:text-indigo-600 transition-colors" />
+          )}
+        </button>
+
         {/* Notifications Icon Button */}
         <div className="relative">
           <button
             onClick={() => setShowNotifications(!showNotifications)}
-            className="w-8 h-8 rounded-lg bg-[#191E27] border border-[#313C4A] hover:border-[#4D525E] flex items-center justify-center text-[#7B8490] hover:text-white transition-colors relative"
+            className="w-8 h-8 rounded-lg bg-[#191E27] border border-[#313C4A] hover:border-[#4D525E] flex items-center justify-center text-[#7B8490] hover:text-white transition-colors relative focus:outline-none"
+            aria-label="Notifications"
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (

@@ -215,7 +215,7 @@ export const Dashboard: React.FC = () => {
           backgroundPosition: 'center top',
           backgroundRepeat: 'no-repeat',
         }}>
-        <div className="absolute inset-0" style={{ background: 'rgba(4,6,14,0.46)' }} />
+        <div className="absolute inset-0 dashboard-bg-overlay" style={{ background: 'rgba(4,6,14,0.46)' }} />
       </div>
 
       {/* CONTENT */}

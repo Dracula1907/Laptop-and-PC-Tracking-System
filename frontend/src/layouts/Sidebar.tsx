@@ -34,15 +34,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
   return (
     <aside
       className={`fixed top-0 left-0 bottom-0 z-40 bg-[#0A0D14]/96 border-r border-[#1E2535] flex flex-col transition-all duration-300 ${
-        collapsed ? 'w-16' : 'w-60'
+        collapsed ? 'w-16' : 'w-64'
       }`}
       style={{ backdropFilter: 'blur(12px)' }}
     >
       {/* Brand Header */}
-      <div className="h-14 px-3 flex items-center justify-between border-b border-[#1E2535]">
+      <div className="h-16 px-3.5 flex items-center justify-between border-b border-[#1E2535]">
         {!collapsed ? (
-          <div className="flex items-center space-x-2.5 min-w-0 pr-1 overflow-hidden">
-            <div className="w-8 h-8 rounded-lg bg-[#121624] border border-[#2B3550] flex items-center justify-center p-1 shadow-sm shrink-0">
+          <div className="flex items-center space-x-3 min-w-0 pr-1 overflow-hidden">
+            <div className="w-[38px] h-[38px] rounded-lg bg-[#121624] border border-[#2B3550] flex items-center justify-center p-1 shadow-sm shrink-0">
               <img
                 src="/faith-logo-app.png"
                 alt="Faith Automation"
@@ -50,13 +50,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
               />
             </div>
             <div className="min-w-0">
-              <h2 className="text-[11.5px] font-bold text-white tracking-tight leading-snug">
+              <h2 className="text-[13px] font-bold text-white tracking-tight leading-snug truncate">
                 Faith Automation IT Inventory
               </h2>
             </div>
           </div>
         ) : (
-          <div className="mx-auto w-8 h-8 rounded-lg bg-[#121624] border border-[#2B3550] flex items-center justify-center p-1 shadow-sm">
+          <div className="mx-auto w-[38px] h-[38px] rounded-lg bg-[#121624] border border-[#2B3550] flex items-center justify-center p-1 shadow-sm">
             <img
               src="/faith-logo-app.png"
               alt="Faith Automation"
@@ -66,7 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="p-1 rounded text-slate-500 hover:text-white hover:bg-[#1A2035] transition-colors hidden sm:block shrink-0"
+          className="p-1.5 rounded-md text-slate-500 hover:text-white hover:bg-[#1A2035] transition-colors hidden sm:block shrink-0"
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
