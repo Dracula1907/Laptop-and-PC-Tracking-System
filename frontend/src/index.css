@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* STRICT COLOR PALETTE (REFERENCE-LOCKED) */
+    --bg-deep: #030309;
+    --bg-darkest: #05070C;
+    --bg-graphite-1: #0E121B;
+    --bg-graphite-2: #191E27;
+    --bg-graphite-3: #232C38;
+    --border-steel-1: #313C4A;
+    --border-steel-2: #4D525E;
+    
+    /* Neutrals */
+    --steel-muted: #58707A;
+    --steel-light: #7B8490;
+    --text-sub: #A0A9B0;
+    --text-light: #CED1D5;
+    --text-white: #F1F3F5;
+
+    /* Controlled Accents */
+    --accent-cyan: #22C7D6;
+    --accent-cyan-glow: #43D7DE;
+    --accent-cyan-soft: #1BA8B8;
+    --accent-green: #10B981;
+    --accent-green-soft: #21C98A;
+    --accent-amber: #D9962E;
+    --accent-amber-warm: #E6A13A;
+    --accent-amber-dark: #C98524;
+    --accent-crimson: #C53A43;
+    --accent-crimson-dark: #A82A32;
+    --accent-purple-muted: #635A91;
+  }
+
+  body {
+    background-color: #030309;
+    min-height: 100vh;
+    color: #CED1D5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Industrial Telemetry Metallic Card Material */
+.telemetry-card {
+  background: linear-gradient(180deg, rgba(25, 30, 39, 0.95) 0%, rgba(14, 18, 27, 0.98) 100%);
+  border: 1px solid #313C4A;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  position: relative;
+  backdrop-filter: blur(16px);
+}
+
+.telemetry-card:hover {
+  border-color: #58707A;
+  box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+/* Chamfered Tech Corners */
+.tech-chamfer {
+  clip-path: polygon(
+    0 8px,
+    8px 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% calc(100% - 8px),
+    calc(100% - 8px) 100%,
+    8px 100%,
+    0 calc(100% - 8px)
+  );
+}
+
+.tech-chamfer-lg {
+  clip-path: polygon(
+    0 12px,
+    12px 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% calc(100% - 12px),
+    calc(100% - 12px) 100%,
+    12px 100%,
+    0 calc(100% - 12px)
+  );
+}
+
+/* Sidebar Active State (Muted Industrial Graphite with Steel/Cyan Highlight) */
+.nav-active-pill {
+  background: linear-gradient(90deg, #191E27 0%, #232C38 100%);
+  border: 1px solid #313C4A;
+  border-left: 2px solid #22C7D6;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 2px 8px rgba(0, 0, 0, 0.5);
+  color: #F1F3F5;
+}
+
+/* Circuit trace animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+
+.circuit-pulse {
+  animation: pulse-subtle 4s ease-in-out infinite;
+}
+
+/* Custom Telemetry Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: #030309;
+}
+::-webkit-scrollbar-thumb {
+  background: #232C38;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #313C4A;
+}

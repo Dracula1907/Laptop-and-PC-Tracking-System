@@ -1,0 +1,569 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+  EXITED
+}
+
+enum AssetType {
+  LAPTOP
+  DESKTOP
+  WORKSTATION
+  MONITOR
+  KEYBOARD
+  MOUSE
+  HEADSET
+  CHARGER
+  ADAPTER
+  OTHER
+}
+
+enum AssetStatus {
+  AVAILABLE
+  RESERVED
+  ASSIGNED
+  IN_USE
+  UNDER_REPAIR
+  DAMAGED
+  LOST
+  STOLEN
+  RETURNED
+  IN_TRANSIT
+  RETIRED
+  SCRAPPED
+}
+
+enum AssetCondition {
+  EXCELLENT
+  GOOD
+  FAIR
+  DAMAGED
+  CRITICAL
+}
+
+enum WorkflowStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum MaintenanceStatus {
+  REPORTED
+  APPROVED
+  IN_PROGRESS
+  WAITING_FOR_PARTS
+  COMPLETED
+  CANCELLED
+}
+
+enum AssetAction {
+  CREATED
+  ASSIGNED
+  TRANSFERRED
+  RETURNED
+  STATUS_CHANGED
+  CONDITION_CHANGED
+  LOCATION_CHANGED
+  HOLDER_CHANGED
+  MAINTENANCE_STARTED
+  MAINTENANCE_COMPLETED
+  RETIRED
+  SCRAPPED
+}
+
+enum AllocationStatus {
+  ALLOCATED
+  NOT_ALLOCATED
+}
+
+enum AssetCriticality {
+  HIGH
+  MEDIUM
+  LOW
+  CRITICAL
+  UNSPECIFIED
+}
+
+enum HolderType {
+  EMPLOYEE
+  SHARED
+  ROOM
+  POOL
+  STOCK
+  UNKNOWN
+}
+
+enum HolderVerificationStatus {
+  VERIFIED
+  NEEDS_REVIEW
+  NON_EMPLOYEE_HOLDER
+}
+
+enum DataQualityStatus {
+  CLEAN
+  WARNING
+  NEEDS_REVIEW
+}
+
+enum ImportStatus {
+  UPLOADED
+  VALIDATING
+  READY
+  IMPORTED
+  PARTIAL
+  FAILED
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  code        String           @unique
+  description String?
+  users       User[]
+  permissions RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String
+  code        String           @unique
+  module      String
+  description String?
+  roles       RolePermission[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  passwordHash String
+  employeeId   String?   @unique
+  employee     Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  roleId       String
+  role         Role      @relation(fields: [roleId], references: [id])
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+  assignedByWorkflow   AssetAssignment[] @relation("AssignedByRelation")
+  approvedByAssignment AssetAssignment[] @relation("ApprovedByAssignmentRelation")
+  requestedTransfers   AssetTransfer[]   @relation("RequestedByTransferRelation")
+  approvedTransfers    AssetTransfer[]   @relation("ApprovedByTransferRelation")
+  receivedReturns      AssetReturn[]     @relation("ReceivedByReturnRelation")
+  reportedMaintenance MaintenanceRecord[] @relation("ReportedByMaintenanceRelation")
+  historyPerformed     AssetStatusHistory[] @relation("PerformedByRelation")
+  importBatches        ImportBatch[]
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employees Employee[]
+  assets    Asset[]
+  previousTransfers AssetTransfer[] @relation("PreviousDeptRelation")
+  newTransfers      AssetTransfer[] @relation("NewDeptRelation")
+}
+
+model Location {
+  id          String   @id @default(uuid())
+  name        String
+  code        String   @unique
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employees Employee[]
+  assets    Asset[]
+  previousTransfers AssetTransfer[] @relation("PreviousLocRelation")
+  newTransfers      AssetTransfer[] @relation("NewLocRelation")
+}
+
+model Employee {
+  id           String         @id @default(uuid())
+  employeeCode String         @unique
+  fullName     String
+  email        String         @unique
+  phone        String?
+  designation  String?
+  departmentId String
+  department   Department     @relation(fields: [departmentId], references: [id])
+  locationId   String
+  location     Location       @relation(fields: [locationId], references: [id])
+  joiningDate  DateTime?
+  status       EmployeeStatus @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  user               User?
+  heldAssets         Asset[]          @relation("CurrentHolderRelation")
+  assignments        AssetAssignment[]
+  previousTransfers  AssetTransfer[]  @relation("PreviousHolderRelation")
+  newTransfers       AssetTransfer[]  @relation("NewHolderRelation")
+  returns            AssetReturn[]
+  previousHistory    AssetStatusHistory[] @relation("PrevHolderHistoryRelation")
+  newHistory         AssetStatusHistory[] @relation("NewHolderHistoryRelation")
+
+  @@index([employeeCode])
+  @@index([email])
+  @@index([departmentId])
+  @@index([locationId])
+}
+
+model Asset {
+  id                      String                   @id @default(uuid())
+  assetCode               String                   @unique
+  companyAssetId          String?                  @unique
+  sourceAssetId           String?                  // Exact raw un-trimmed Excel Asset ID (e.g. " FAA-475", "FAA -349")
+  assetName               String?
+  assetDescription        String?                  // Exact Excel Asset Description ("In Use", "NOT IN USE", "Site use Laptop")
+  assetType               AssetType
+  assetNumber             String?
+  laptopNumber            String?
+  pcNumber                String?
+  serialNumber            String?
+  manufacturer            String                   @default("Dell")
+  model                   String                   @default("Dell 5440")
+  description             String?
+  status                  AssetStatus              @default(AVAILABLE)
+  condition               AssetCondition           @default(GOOD)
+  
+  // Exact 16 source fields directly on Asset model
+  sourceAssetStatus       String?                  // "Active", "Inactive"
+  sourceAllocationStatus  String?                  // "Allocated", "Not Allocated"
+  sourceAssetType         String?                  // "Laptop", "Office PC", "Work Station"
+  location                String?                  // Exact Excel location ("Management", "Automation-PLC", "Design", etc.)
+  allocationStatus        AllocationStatus         @default(NOT_ALLOCATED)
+  criticality             String?                  // "High", "Medium", or null
+  employeeNameSource      String?                  // Exact Excel Employee Name ("Nilesh Pandhare(New)", "Training Room", or null)
+  lanIp                   String?                  // Direct LAN IP or null
+  ram                     String?                  // Direct RAM or null ("8GB")
+  dateOfAllocation        DateTime?                // Direct Date of allocation or null
+  dateOfDeallocation      DateTime?                // Direct Date of deallocation or null
+  cpu                     String?                  // Direct CPU ("i3", "i5", "i7", "Xeon")
+  lanMacAddress           String?                  // Direct LAN Mac Address or null
+
+  holderType              HolderType               @default(UNKNOWN)
+  holderDisplayName       String?
+  holderVerificationStatus HolderVerificationStatus @default(VERIFIED)
+
+  dataQualityStatus       DataQualityStatus        @default(CLEAN)
+  dataQualityIssues       String?
+
+  currentHolderId         String?
+  currentHolder           Employee?                @relation("CurrentHolderRelation", fields: [currentHolderId], references: [id], onDelete: SetNull)
+  departmentId            String?
+  department              Department?              @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  locationId              String?
+  locationRel             Location?                @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  importBatchId           String?
+  importBatch             ImportBatch?             @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  sourceRowNumber         Int?
+  sourceRawData           String?                  @db.Text
+
+  purchaseDate            DateTime?
+  purchaseCost            Float?
+  vendor                  String?
+  warrantyStart           DateTime?
+  warrantyEnd             DateTime?
+  notes                   String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+
+  specifications          AssetSpecification?
+  assignments             AssetAssignment[]
+  transfers               AssetTransfer[]
+  returns                 AssetReturn[]
+  maintenance             MaintenanceRecord[]
+  statusHistory           AssetStatusHistory[]
+
+  @@index([assetCode])
+  @@index([companyAssetId])
+  @@index([assetType])
+  @@index([status])
+  @@index([condition])
+  @@index([allocationStatus])
+  @@index([criticality])
+  @@index([dataQualityStatus])
+  @@index([holderType])
+  @@index([serialNumber])
+  @@index([currentHolderId])
+  @@index([departmentId])
+  @@index([locationId])
+  @@index([warrantyEnd])
+}
+
+model AssetSpecification {
+  id                       String   @id @default(uuid())
+  assetId                  String   @unique
+  asset                    Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  processor                String?
+  ram                      String?
+  storage                  String?
+  storageType              String?
+  gpu                      String?
+  displaySize              String?
+  operatingSystem          String?
+  operatingSystemVersion   String?
+  macAddress               String?
+  ipAddress                String?
+  batteryHealth            String?
+  additionalSpecifications String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+model AssetAssignment {
+  id                    String         @id @default(uuid())
+  assetId               String
+  asset                 Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employeeId            String
+  employee              Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assignedById          String
+  assignedBy            User           @relation("AssignedByRelation", fields: [assignedById], references: [id])
+  approvedById          String?
+  approvedBy            User?          @relation("ApprovedByAssignmentRelation", fields: [approvedById], references: [id])
+  assignedAt            DateTime       @default(now())
+  expectedReturnDate    DateTime?
+  conditionAtAssignment AssetCondition
+  remarks               String?
+  status                WorkflowStatus @default(ACTIVE)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@index([assetId])
+  @@index([employeeId])
+  @@index([status])
+}
+
+model AssetTransfer {
+  id                   String         @id @default(uuid())
+  assetId              String
+  asset                Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  previousHolderId     String?
+  previousHolder       Employee?      @relation("PreviousHolderRelation", fields: [previousHolderId], references: [id])
+  newHolderId          String
+  newHolder            Employee       @relation("NewHolderRelation", fields: [newHolderId], references: [id])
+  previousDepartmentId String?
+  previousDepartment   Department?    @relation("PreviousDeptRelation", fields: [previousDepartmentId], references: [id])
+  newDepartmentId      String?
+  newDepartment        Department?    @relation("NewDeptRelation", fields: [newDepartmentId], references: [id])
+  previousLocationId   String?
+  previousLocation     Location?      @relation("PreviousLocRelation", fields: [previousLocationId], references: [id])
+  newLocationId        String?
+  newLocation          Location?      @relation("NewLocRelation", fields: [newLocationId], references: [id])
+  requestedById        String
+  requestedBy          User           @relation("RequestedByTransferRelation", fields: [requestedById], references: [id])
+  approvedById         String?
+  approvedBy           User?          @relation("ApprovedByTransferRelation", fields: [approvedById], references: [id])
+  transferDate         DateTime       @default(now())
+  reason               String?
+  remarks              String?
+  status               WorkflowStatus @default(PENDING)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  @@index([assetId])
+  @@index([newHolderId])
+  @@index([status])
+}
+
+model AssetReturn {
+  id                  String         @id @default(uuid())
+  assetId             String
+  asset               Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employeeId          String
+  employee            Employee       @relation(fields: [employeeId], references: [id])
+  receivedById        String
+  receivedBy          User           @relation("ReceivedByReturnRelation", fields: [receivedById], references: [id])
+  returnDate          DateTime       @default(now())
+  conditionAtReturn   AssetCondition
+  accessoriesReturned Boolean        @default(true)
+  damageReported      Boolean        @default(false)
+  missingAccessories  String?
+  remarks             String?
+  status              WorkflowStatus @default(COMPLETED)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  @@index([assetId])
+  @@index([employeeId])
+}
+
+model MaintenanceRecord {
+  id               String            @id @default(uuid())
+  assetId          String
+  asset            Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  reportedById     String
+  reportedBy       User              @relation("ReportedByMaintenanceRelation", fields: [reportedById], references: [id])
+  issueTitle       String
+  issueDescription String
+  reportedAt       DateTime          @default(now())
+  repairStatus     MaintenanceStatus @default(REPORTED)
+  technician       String?
+  serviceProvider  String?
+  repairStartDate  DateTime?
+  repairEndDate    DateTime?
+  repairCost       Float?            @default(0.0)
+  resolution       String?
+  remarks          String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  parts            MaintenancePart[]
+
+  @@index([assetId])
+  @@index([repairStatus])
+}
+
+model MaintenancePart {
+  id            String            @id @default(uuid())
+  maintenanceId String
+  maintenance   MaintenanceRecord @relation(fields: [maintenanceId], references: [id], onDelete: Cascade)
+  partName      String
+  quantity      Int               @default(1)
+  cost          Float             @default(0.0)
+  remarks       String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+
+model AssetStatusHistory {
+  id               String         @id @default(uuid())
+  assetId          String
+  asset            Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  action           AssetAction
+  previousStatus   AssetStatus?
+  newStatus        AssetStatus?
+  previousHolderId String?
+  previousHolder   Employee?      @relation("PrevHolderHistoryRelation", fields: [previousHolderId], references: [id])
+  newHolderId      String?
+  newHolder        Employee?      @relation("NewHolderHistoryRelation", fields: [newHolderId], references: [id])
+  performedById    String?
+  performedBy      User?          @relation("PerformedByRelation", fields: [performedById], references: [id])
+  remarks          String?
+  createdAt        DateTime       @default(now())
+
+  @@index([assetId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  oldValue   String?
+  newValue   String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String
+  title      String
+  message    String
+  entityType String?
+  entityId   String?
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  category    String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model ImportBatch {
+  id           String         @id @default(uuid())
+  fileName     String
+  fileHash     String?
+  uploadedById String?
+  uploadedBy   User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedAt   DateTime       @default(now())
+  totalRows    Int            @default(0)
+  validRows    Int            @default(0)
+  warningRows  Int            @default(0)
+  errorRows    Int            @default(0)
+  importedRows Int            @default(0)
+  skippedRows  Int            @default(0)
+  status       ImportStatus   @default(READY)
+
+  assets       Asset[]
+  rowLogs      ImportRowLog[]
+
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([status])
+  @@index([uploadedAt])
+}
+
+model ImportRowLog {
+  id             String      @id @default(uuid())
+  importBatchId  String
+  importBatch    ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  rowNumber      Int
+  companyAssetId String?
+  status         String      // VALID, WARNING, ERROR, IMPORTED, SKIPPED
+  warnings       String?
+  errors         String?
+  rawData        String      @db.Text
+  createdAt      DateTime    @default(now())
+
+  @@index([importBatchId])
+  @@index([companyAssetId])
+}
