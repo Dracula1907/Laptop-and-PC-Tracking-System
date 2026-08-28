@@ -1,23 +1,34 @@
 import prisma from '../config/prisma';
 import { AssetStatus, AssetCondition, WorkflowStatus, MaintenanceStatus, AssetAction, AllocationStatus, Prisma } from '@prisma/client';
-import { AssetCreateSchema, AssetUpdateSchema, AssetAssignmentSchema, AssetTransferSchema, AssetReturnSchema, MaintenanceCreateSchema } from '../validators/schemas';
+import {
+  AssetCreateSchema,
+  AssetUpdateSchema,
+  AssetHardwareUpdateSchema,
+  AssetAssignmentSchema,
+  AssetTransferSchema,
+  AssetReturnSchema,
+  MaintenanceCreateSchema,
+} from '../validators/schemas';
 import { HistoryService } from './history.service';
 
 export class AssetService {
   // Helper for generating sequential asset codes AST-000001
   private static async generateAssetCode(): Promise<string> {
-    const lastAsset = await prisma.asset.findFirst({
-      orderBy: { createdAt: 'desc' },
+    const astAssets = await prisma.asset.findMany({
+      where: { assetCode: { startsWith: 'AST-' } },
       select: { assetCode: true },
     });
 
-    if (!lastAsset || !lastAsset.assetCode.startsWith('AST-')) {
-      return 'AST-000001';
+    let maxNum = 0;
+    for (const a of astAssets) {
+      const match = a.assetCode.match(/^AST-(\d+)$/);
+      if (match) {
+        const val = parseInt(match[1], 10);
+        if (val > maxNum) maxNum = val;
+      }
     }
 
-    const num = parseInt(lastAsset.assetCode.replace('AST-', ''), 10);
-    const nextNum = isNaN(num) ? 1 : num + 1;
-    return `AST-${nextNum.toString().padStart(6, '0')}`;
+    return `AST-${(maxNum + 1).toString().padStart(6, '0')}`;
   }
 
   // Validate status transition matrix
@@ -69,9 +80,11 @@ export class AssetService {
     sourceAssetStatus?: string;
     department?: string;
     departmentOrArea?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
   }) {
-    const page = Number(query.page) || 1;
-    const limit = Number(query.limit) || 10;
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.max(1, Math.min(1000, Number(query.limit) || 10));
     const skip = (page - 1) * limit;
 
     const where: Prisma.AssetWhereInput = {};
@@ -83,7 +96,7 @@ export class AssetService {
     if (query.locationId) where.locationId = query.locationId;
     if (query.employeeId) where.currentHolderId = query.employeeId;
     if (query.allocationStatus) where.allocationStatus = query.allocationStatus as any;
-    if (query.criticality) where.criticality = query.criticality as any;
+    if (query.criticality) where.criticality = { equals: query.criticality, mode: 'insensitive' };
     if (query.dataQualityStatus) where.dataQualityStatus = query.dataQualityStatus as any;
     if (query.holderType) where.holderType = query.holderType as any;
     if (query.sourceAssetStatus) where.sourceAssetStatus = { equals: query.sourceAssetStatus, mode: 'insensitive' };
@@ -103,26 +116,83 @@ export class AssetService {
       ];
     }
 
-    if (query.search) {
+    if (query.search && query.search.trim()) {
       const s = query.search.trim();
       const sNormalized = s.replace(/\s+/g, '');
       where.OR = [
         { companyAssetId: { contains: s, mode: 'insensitive' } },
         { companyAssetId: { contains: sNormalized, mode: 'insensitive' } },
+        { sourceAssetId: { contains: s, mode: 'insensitive' } },
         { assetCode: { contains: s, mode: 'insensitive' } },
+        { assetName: { contains: s, mode: 'insensitive' } },
+        { assetDescription: { contains: s, mode: 'insensitive' } },
         { assetNumber: { contains: s, mode: 'insensitive' } },
         { laptopNumber: { contains: s, mode: 'insensitive' } },
         { pcNumber: { contains: s, mode: 'insensitive' } },
         { serialNumber: { contains: s, mode: 'insensitive' } },
         { manufacturer: { contains: s, mode: 'insensitive' } },
         { model: { contains: s, mode: 'insensitive' } },
+        { employeeNameSource: { contains: s, mode: 'insensitive' } },
         { currentHolder: { fullName: { contains: s, mode: 'insensitive' } } },
         { currentHolder: { employeeCode: { contains: s, mode: 'insensitive' } } },
         { holderDisplayName: { contains: s, mode: 'insensitive' } },
+        { location: { contains: s, mode: 'insensitive' } },
         { department: { name: { contains: s, mode: 'insensitive' } } },
+        { cpu: { contains: s, mode: 'insensitive' } },
+        { lanIp: { contains: s, mode: 'insensitive' } },
+        { lanMacAddress: { contains: s, mode: 'insensitive' } },
         { specifications: { processor: { contains: s, mode: 'insensitive' } } },
         { specifications: { ipAddress: { contains: s, mode: 'insensitive' } } },
       ];
+    }
+
+    // Dynamic sorting
+    let orderBy: any = [{ companyAssetId: { sort: 'asc', nulls: 'last' } }, { assetCode: 'asc' }];
+    if (query.sortBy) {
+      const order: 'asc' | 'desc' = query.sortOrder === 'desc' ? 'desc' : 'asc';
+      switch (query.sortBy) {
+        case 'companyAssetId':
+        case 'assetId':
+          orderBy = [{ companyAssetId: { sort: order, nulls: 'last' } }, { assetCode: order }];
+          break;
+        case 'assetName':
+        case 'model':
+          orderBy = [{ assetName: { sort: order, nulls: 'last' } }, { model: order }];
+          break;
+        case 'assetType':
+          orderBy = { assetType: order };
+          break;
+        case 'sourceAssetStatus':
+        case 'status':
+          orderBy = [{ sourceAssetStatus: { sort: order, nulls: 'last' } }, { status: order }];
+          break;
+        case 'allocationStatus':
+          orderBy = { allocationStatus: order };
+          break;
+        case 'criticality':
+          orderBy = { criticality: { sort: order, nulls: 'last' } };
+          break;
+        case 'location':
+        case 'department':
+          orderBy = { location: { sort: order, nulls: 'last' } };
+          break;
+        case 'employeeName':
+        case 'employeeNameSource':
+        case 'holder':
+          orderBy = { employeeNameSource: { sort: order, nulls: 'last' } };
+          break;
+        case 'cpu':
+          orderBy = { cpu: { sort: order, nulls: 'last' } };
+          break;
+        case 'serialNumber':
+          orderBy = { serialNumber: { sort: order, nulls: 'last' } };
+          break;
+        case 'createdAt':
+          orderBy = { createdAt: order };
+          break;
+        default:
+          orderBy = [{ companyAssetId: { sort: order, nulls: 'last' } }, { assetCode: order }];
+      }
     }
 
     const [total, assets] = await Promise.all([
@@ -131,7 +201,7 @@ export class AssetService {
         where,
         skip,
         take: limit,
-        orderBy: { companyAssetId: 'asc' },
+        orderBy,
         include: {
           currentHolder: {
             select: { id: true, employeeCode: true, fullName: true, email: true, designation: true },
@@ -224,9 +294,23 @@ export class AssetService {
 
   static async createAsset(data: unknown, userId: string) {
     const validated = AssetCreateSchema.parse(data);
-    const assetCode = await AssetService.generateAssetCode();
-    const companyAssetId = validated.companyAssetId?.trim() || assetCode;
+    const companyAssetId = validated.companyAssetId?.trim() || (await AssetService.generateAssetCode());
 
+    // Check for existing companyAssetId or assetCode
+    const existing = await prisma.asset.findFirst({
+      where: {
+        OR: [
+          { companyAssetId: companyAssetId },
+          { assetCode: companyAssetId },
+        ],
+      },
+    });
+
+    if (existing) {
+      throw new Error(`An asset with ID '${companyAssetId}' already exists in inventory.`);
+    }
+
+    const assetCode = companyAssetId;
     const { specifications, ...assetData } = validated;
 
     const newAsset = await prisma.$transaction(async (tx) => {
@@ -259,10 +343,10 @@ export class AssetService {
         newDepartmentName: asset.department?.name || asset.location || 'IT STOCK',
         newLocationId: asset.locationId,
         newLocationName: asset.locationRel?.name || asset.location || 'IT Area',
-        newHolderName: 'IT STOCK',
+        newHolderName: asset.currentHolder?.fullName || asset.employeeNameSource || 'IT STOCK',
         performedById: userId,
         eventDate: new Date(),
-        remarks: `Asset created with code ${assetCode} (${companyAssetId})`,
+        remarks: `Asset created with ID ${companyAssetId}`,
       });
 
       await tx.auditLog.create({
@@ -271,7 +355,12 @@ export class AssetService {
           action: 'ASSET_CREATE',
           entityType: 'Asset',
           entityId: asset.id,
-          newValue: JSON.stringify({ assetCode, companyAssetId, model: asset.model, status: asset.status }),
+          newValue: JSON.stringify({
+            companyAssetId,
+            assetName: asset.assetName,
+            status: asset.status,
+            allocationStatus: asset.allocationStatus,
+          }),
         },
       });
 
@@ -346,6 +435,116 @@ export class AssetService {
           newValue: JSON.stringify({ status: asset.status, condition: asset.condition, allocationStatus: asset.allocationStatus }),
         },
       });
+
+      return asset;
+    });
+
+    return updated;
+  }
+
+  static async updateHardware(id: string, data: unknown, userId: string) {
+    const existing = await prisma.asset.findUnique({
+      where: { id },
+      include: { specifications: true },
+    });
+    if (!existing) throw new Error('Asset not found');
+
+    const validated = AssetHardwareUpdateSchema.parse(data);
+    const { reason, cpu, ram, storage, monitor, keyboard, mouse, chargerAdapter, otherHardware } = validated;
+
+    // Track field-level diffs for audit log
+    const oldHardware = {
+      cpu: existing.cpu || existing.specifications?.processor || null,
+      ram: existing.ram || existing.specifications?.ram || null,
+      storage: existing.specifications?.storage || null,
+      monitor: existing.specifications?.monitor || null,
+      keyboard: existing.specifications?.keyboard || null,
+      mouse: existing.specifications?.mouse || null,
+      chargerAdapter: existing.specifications?.chargerAdapter || null,
+      otherHardware: existing.specifications?.otherHardware || null,
+    };
+
+    const newHardware = {
+      cpu: cpu !== undefined ? (cpu?.trim() || null) : oldHardware.cpu,
+      ram: ram !== undefined ? (ram?.trim() || null) : oldHardware.ram,
+      storage: storage !== undefined ? (storage?.trim() || null) : oldHardware.storage,
+      monitor: monitor !== undefined ? (monitor?.trim() || null) : oldHardware.monitor,
+      keyboard: keyboard !== undefined ? (keyboard?.trim() || null) : oldHardware.keyboard,
+      mouse: mouse !== undefined ? (mouse?.trim() || null) : oldHardware.mouse,
+      chargerAdapter: chargerAdapter !== undefined ? (chargerAdapter?.trim() || null) : oldHardware.chargerAdapter,
+      otherHardware: otherHardware !== undefined ? (otherHardware?.trim() || null) : oldHardware.otherHardware,
+    };
+
+    const changedFields: string[] = [];
+    Object.keys(newHardware).forEach((k) => {
+      const key = k as keyof typeof newHardware;
+      if (newHardware[key] !== oldHardware[key]) {
+        changedFields.push(`${key.toUpperCase()}: ${oldHardware[key] || '—'} → ${newHardware[key] || '—'}`);
+      }
+    });
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const asset = await tx.asset.update({
+        where: { id },
+        data: {
+          cpu: newHardware.cpu,
+          ram: newHardware.ram,
+          specifications: {
+            upsert: {
+              create: {
+                processor: newHardware.cpu,
+                ram: newHardware.ram,
+                storage: newHardware.storage,
+                monitor: newHardware.monitor,
+                keyboard: newHardware.keyboard,
+                mouse: newHardware.mouse,
+                chargerAdapter: newHardware.chargerAdapter,
+                otherHardware: newHardware.otherHardware,
+              },
+              update: {
+                processor: newHardware.cpu,
+                ram: newHardware.ram,
+                storage: newHardware.storage,
+                monitor: newHardware.monitor,
+                keyboard: newHardware.keyboard,
+                mouse: newHardware.mouse,
+                chargerAdapter: newHardware.chargerAdapter,
+                otherHardware: newHardware.otherHardware,
+              },
+            },
+          },
+        },
+        include: {
+          specifications: true,
+          department: true,
+          locationRel: true,
+          currentHolder: true,
+        },
+      });
+
+      if (changedFields.length > 0) {
+        const changeSummary = changedFields.join(', ');
+        await tx.auditLog.create({
+          data: {
+            userId,
+            action: 'HARDWARE_UPDATE',
+            entityType: 'Asset',
+            entityId: id,
+            oldValue: JSON.stringify(oldHardware),
+            newValue: JSON.stringify(newHardware),
+          },
+        });
+
+        await HistoryService.recordEvent(tx, {
+          assetId: id,
+          action: AssetAction.STATUS_CHANGED,
+          newStatus: existing.status,
+          newCondition: existing.condition,
+          performedById: userId,
+          eventDate: new Date(),
+          remarks: `Hardware Configuration Updated: ${changeSummary}${reason ? ` (Reason: ${reason})` : ''}`,
+        });
+      }
 
       return asset;
     });
@@ -745,3 +944,5 @@ export class AssetService {
     });
   }
 }
+
+

@@ -6,7 +6,6 @@ import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
-import { QRCodeModal } from '../components/QRCodeModal';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -17,7 +16,6 @@ import {
   ArrowRightLeft,
   RotateCcw,
   Wrench,
-  QrCode,
   ArrowLeft,
   Code,
   History,
@@ -27,6 +25,8 @@ import {
   Search,
   User,
   ShieldCheck,
+  Trash2,
+  Cpu,
 } from 'lucide-react';
 
 export const AssetDetail: React.FC = () => {
@@ -52,8 +52,23 @@ export const AssetDetail: React.FC = () => {
   const [showTransferModal, setShowTransferModal] = useState<boolean>(false);
   const [showReturnModal, setShowReturnModal] = useState<boolean>(false);
   const [showMaintModal, setShowMaintModal] = useState<boolean>(false);
-  const [showQRModal, setShowQRModal] = useState<boolean>(false);
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+  const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
   const [showRawData, setShowRawData] = useState<boolean>(false);
+
+
+  const [showHardwareModal, setShowHardwareModal] = useState<boolean>(false);
+  const [hardwareForm, setHardwareForm] = useState({
+    cpu: '',
+    ram: '',
+    storage: '',
+    monitor: '',
+    keyboard: '',
+    mouse: '',
+    chargerAdapter: '',
+    otherHardware: '',
+    reason: '',
+  });
 
   // Workflow Form States
   const [assignForm, setAssignForm] = useState({ employeeId: '', expectedReturnDate: '', conditionAtAssignment: 'GOOD', remarks: '' });
@@ -195,6 +210,26 @@ export const AssetDetail: React.FC = () => {
     }
   };
 
+  const handleHardwareSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setActionLoading(true);
+    try {
+      const res: any = await api.put(`/assets/${asset.id}/hardware`, hardwareForm);
+      if (res?.success ?? res?.data?.success) {
+        showToast('Hardware configuration updated successfully!', 'success');
+        setShowHardwareModal(false);
+        fetchAsset();
+        fetchHistory();
+      } else {
+        showToast(res?.message || 'Failed to update hardware configuration', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || err.message || 'Failed to update hardware.', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleExportHistory = () => {
     if (!historyEvents.length) {
       showToast('No history records available to export.', 'warning');
@@ -221,6 +256,24 @@ export const AssetDetail: React.FC = () => {
     }));
     exportToExcel(exportData, `FAITH_Asset_History_${asset.companyAssetId || asset.assetCode}`);
     showToast('Asset history spreadsheet exported.', 'success');
+  };
+
+  const handleDeleteAsset = async () => {
+    setDeleteLoading(true);
+    try {
+      const res: any = await api.delete(`/assets/${asset.id}`);
+      if (res?.success ?? res?.data?.success) {
+        showToast(res.message || `Asset ${asset.companyAssetId || asset.assetCode} processed successfully.`, 'success');
+        navigate('/assets');
+      } else {
+        showToast(res?.message || 'Failed to delete asset.', 'error');
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.message || err.message || 'Error deleting asset.', 'error');
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteModal(false);
+    }
   };
 
   const isAct = asset.sourceAssetStatus === 'Active';
@@ -292,12 +345,19 @@ export const AssetDetail: React.FC = () => {
               <History className="w-4 h-4 mr-1.5" />
               {activeTab === 'history' ? 'View Specifications' : 'View Complete History'}
             </Button>
-            <Button variant="secondary" icon={<QrCode className="w-4 h-4 mr-1" />} onClick={() => setShowQRModal(true)}>
-              QR Tag
-            </Button>
             {hasPermission('ASSET_UPDATE') && (
               <Button variant="secondary" icon={<Edit className="w-4 h-4 mr-1" />} onClick={() => navigate(`/assets/${asset.id}/edit`)}>
                 Edit
+              </Button>
+            )}
+            {hasPermission('ASSET_DELETE') && (
+              <Button
+                variant="secondary"
+                icon={<Trash2 className="w-4 h-4 mr-1 text-rose-400" />}
+                onClick={() => setShowDeleteModal(true)}
+                className="hover:bg-rose-950/30 hover:border-rose-500/40 text-rose-400"
+              >
+                Delete / Deactivate
               </Button>
             )}
             {asset.status === 'AVAILABLE' && hasPermission('ASSIGNMENT_CREATE') && (
@@ -379,6 +439,21 @@ export const AssetDetail: React.FC = () => {
             ) : (
               <span className="text-zinc-500 mt-1 block font-mono">—</span>
             )}
+          </div>
+
+          <div className="border-l border-borderBase pl-6">
+            <span className="text-[10px] text-textSecondary uppercase font-semibold block font-mono">Data Quality</span>
+            <span
+              className={`inline-block px-2.5 py-0.5 rounded text-xs font-semibold mt-1 font-mono ${
+                asset.dataQualityStatus === 'CLEAN'
+                  ? 'bg-emerald-950/40 text-emerald-400 border border-emerald-500/20'
+                  : asset.dataQualityStatus === 'WARNING'
+                  ? 'bg-yellow-950/40 text-yellow-400 border border-yellow-500/20'
+                  : 'bg-amber-950/40 text-amber-400 border border-amber-500/20'
+              }`}
+            >
+              {asset.dataQualityStatus || 'CLEAN'}
+            </span>
           </div>
         </div>
 
@@ -519,6 +594,136 @@ export const AssetDetail: React.FC = () => {
       {/* ══ TAB 1: SPECIFICATIONS & 16-COL MASTER ══ */}
       {activeTab === 'details' && (
         <div className="space-y-6">
+          {/* Hardware Configuration Section */}
+          <Card
+            title="Hardware Configuration"
+            subtitle="Component specifications and peripherals attached to this device."
+            action={
+              hasPermission('ASSET_UPDATE') && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setHardwareForm({
+                      cpu: asset.specifications?.processor || asset.cpu || '',
+                      ram: asset.specifications?.ram || asset.ram || '',
+                      storage: asset.specifications?.storage || '',
+                      monitor: asset.specifications?.monitor || '',
+                      keyboard: asset.specifications?.keyboard || '',
+                      mouse: asset.specifications?.mouse || '',
+                      chargerAdapter: asset.specifications?.chargerAdapter || '',
+                      otherHardware: asset.specifications?.otherHardware || '',
+                      reason: '',
+                    });
+                    setShowHardwareModal(true);
+                  }}
+                >
+                  <Cpu className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+                  {asset.specifications?.processor || asset.cpu || asset.specifications?.ram || asset.ram || asset.specifications?.storage || asset.specifications?.monitor || asset.specifications?.keyboard || asset.specifications?.mouse || asset.specifications?.chargerAdapter || asset.specifications?.otherHardware
+                    ? 'Edit Hardware'
+                    : '+ Add Hardware'}
+                </Button>
+              )
+            }
+          >
+            {!(
+              asset.specifications?.processor ||
+              asset.cpu ||
+              asset.specifications?.ram ||
+              asset.ram ||
+              asset.specifications?.storage ||
+              asset.specifications?.monitor ||
+              asset.specifications?.keyboard ||
+              asset.specifications?.mouse ||
+              asset.specifications?.chargerAdapter ||
+              asset.specifications?.otherHardware
+            ) ? (
+              <div className="text-center py-6 text-textSecondary text-xs">
+                <p className="mb-3">No hardware configuration added.</p>
+                {hasPermission('ASSET_UPDATE') && (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => {
+                      setHardwareForm({
+                        cpu: asset.cpu || '',
+                        ram: asset.ram || '',
+                        storage: '',
+                        monitor: '',
+                        keyboard: '',
+                        mouse: '',
+                        chargerAdapter: '',
+                        otherHardware: '',
+                        reason: '',
+                      });
+                      setShowHardwareModal(true);
+                    }}
+                  >
+                    + Add Hardware
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
+                <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                  <span className="text-[10px] text-textSecondary uppercase block font-medium">CPU</span>
+                  <p className="text-sm font-bold text-textPrimary font-mono mt-0.5">
+                    {asset.specifications?.processor || asset.cpu || '—'}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                  <span className="text-[10px] text-textSecondary uppercase block font-medium">RAM</span>
+                  <p className="text-sm font-bold text-textPrimary font-mono mt-0.5">
+                    {asset.specifications?.ram || asset.ram || '—'}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                  <span className="text-[10px] text-textSecondary uppercase block font-medium">Storage</span>
+                  <p className="text-sm font-bold text-textPrimary font-mono mt-0.5">
+                    {asset.specifications?.storage || '—'}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                  <span className="text-[10px] text-textSecondary uppercase block font-medium">Monitor</span>
+                  <p className="text-sm font-semibold text-textPrimary mt-0.5">
+                    {asset.specifications?.monitor || '—'}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                  <span className="text-[10px] text-textSecondary uppercase block font-medium">Keyboard</span>
+                  <p className="text-sm font-semibold text-textPrimary mt-0.5">
+                    {asset.specifications?.keyboard || '—'}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                  <span className="text-[10px] text-textSecondary uppercase block font-medium">Mouse</span>
+                  <p className="text-sm font-semibold text-textPrimary mt-0.5">
+                    {asset.specifications?.mouse || '—'}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                  <span className="text-[10px] text-textSecondary uppercase block font-medium">Charger / Adapter</span>
+                  <p className="text-sm font-semibold text-textPrimary mt-0.5">
+                    {asset.specifications?.chargerAdapter || '—'}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                  <span className="text-[10px] text-textSecondary uppercase block font-medium">Other Hardware</span>
+                  <p className="text-sm font-semibold text-textPrimary mt-0.5">
+                    {asset.specifications?.otherHardware || '—'}
+                  </p>
+                </div>
+              </div>
+            )}
+          </Card>
+
           <Card
             title="Complete 16-Column Master Specifications"
             subtitle="Authoritative hardware, network, and organizational allocation identity."
@@ -871,16 +1076,6 @@ export const AssetDetail: React.FC = () => {
         </div>
       )}
 
-      {/* QR Code Modal */}
-      {showQRModal && (
-        <QRCodeModal
-          isOpen={showQRModal}
-          onClose={() => setShowQRModal(false)}
-          assetCode={asset.companyAssetId || asset.assetCode}
-          assetTitle={`${asset.assetName || asset.model}`}
-        />
-      )}
-
       {/* Assignment Modal */}
       {showAssignModal && (
         <Modal isOpen={showAssignModal} onClose={() => setShowAssignModal(false)} title="Assign Asset to Employee">
@@ -1003,6 +1198,121 @@ export const AssetDetail: React.FC = () => {
               <Button variant="danger" type="submit" loading={actionLoading}>Open Ticket</Button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Edit Hardware Configuration Modal */}
+      {showHardwareModal && (
+        <Modal
+          isOpen={showHardwareModal}
+          onClose={() => setShowHardwareModal(false)}
+          title="Edit Hardware Configuration"
+          subtitle={`Configure hardware components and accessories for ${asset.companyAssetId || asset.assetCode}`}
+          maxWidth="lg"
+        >
+          <form onSubmit={handleHardwareSubmit} className="space-y-4 text-xs font-sans">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="CPU Processor"
+                value={hardwareForm.cpu}
+                onChange={(e) => setHardwareForm({ ...hardwareForm, cpu: e.target.value })}
+                placeholder="e.g. Intel Core i5"
+              />
+              <Input
+                label="RAM Capacity"
+                value={hardwareForm.ram}
+                onChange={(e) => setHardwareForm({ ...hardwareForm, ram: e.target.value })}
+                placeholder="e.g. 16 GB"
+              />
+              <Input
+                label="Storage"
+                value={hardwareForm.storage}
+                onChange={(e) => setHardwareForm({ ...hardwareForm, storage: e.target.value })}
+                placeholder="e.g. 512 GB SSD"
+              />
+              <Input
+                label="Monitor"
+                value={hardwareForm.monitor}
+                onChange={(e) => setHardwareForm({ ...hardwareForm, monitor: e.target.value })}
+                placeholder='e.g. Dell 24"'
+              />
+              <Input
+                label="Keyboard"
+                value={hardwareForm.keyboard}
+                onChange={(e) => setHardwareForm({ ...hardwareForm, keyboard: e.target.value })}
+                placeholder="e.g. Dell USB"
+              />
+              <Input
+                label="Mouse"
+                value={hardwareForm.mouse}
+                onChange={(e) => setHardwareForm({ ...hardwareForm, mouse: e.target.value })}
+                placeholder="e.g. Dell USB"
+              />
+              <Input
+                label="Charger / Adapter"
+                value={hardwareForm.chargerAdapter}
+                onChange={(e) => setHardwareForm({ ...hardwareForm, chargerAdapter: e.target.value })}
+                placeholder="e.g. 65W"
+              />
+              <Input
+                label="Other Hardware"
+                value={hardwareForm.otherHardware}
+                onChange={(e) => setHardwareForm({ ...hardwareForm, otherHardware: e.target.value })}
+                placeholder="e.g. Docking Station"
+              />
+            </div>
+
+            <Input
+              label="Change Reason / Upgrade Notes (Optional)"
+              value={hardwareForm.reason}
+              onChange={(e) => setHardwareForm({ ...hardwareForm, reason: e.target.value })}
+              placeholder="e.g. Upgrade"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-borderBase">
+              <Button variant="secondary" type="button" onClick={() => setShowHardwareModal(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" type="submit" loading={actionLoading} className="bg-brandPrimary hover:bg-brandPrimary/90 text-white">
+                Save Changes
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <Modal
+          isOpen={showDeleteModal}
+          onClose={() => setShowDeleteModal(false)}
+          title="Confirm Asset Deletion"
+          subtitle="Review historical dependencies before proceeding."
+          maxWidth="md"
+        >
+          <div className="space-y-4 text-xs font-sans">
+            <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300">
+              <p className="font-semibold text-sm text-white mb-1">
+                Delete Asset {asset.companyAssetId || asset.assetCode}?
+              </p>
+              <p className="text-rose-200/90 text-xs leading-relaxed">
+                If this asset has associated assignments, maintenance tickets, or handover records, it will be safely retired and deactivated to preserve historical audit trails. If it has no historical records, it will be permanently removed.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-borderBase">
+              <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                loading={deleteLoading}
+                onClick={handleDeleteAsset}
+                className="bg-rose-600 hover:bg-rose-700 text-white shadow-md"
+              >
+                Confirm Deletion
+              </Button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

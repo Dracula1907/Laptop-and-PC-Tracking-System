@@ -46,23 +46,40 @@ export const AssetCreateSchema = z.object({
   // Specifications
   specifications: z
     .object({
-      processor: z.string().optional(),
-      ram: z.string().optional(),
-      storage: z.string().optional(),
-      storageType: z.string().optional(),
-      gpu: z.string().optional(),
-      displaySize: z.string().optional(),
-      operatingSystem: z.string().optional(),
-      operatingSystemVersion: z.string().optional(),
-      macAddress: z.string().optional(),
-      ipAddress: z.string().optional(),
-      batteryHealth: z.string().optional(),
-      additionalSpecifications: z.string().optional(),
+      processor: z.string().optional().nullable(),
+      ram: z.string().optional().nullable(),
+      storage: z.string().optional().nullable(),
+      storageType: z.string().optional().nullable(),
+      gpu: z.string().optional().nullable(),
+      displaySize: z.string().optional().nullable(),
+      monitor: z.string().optional().nullable(),
+      keyboard: z.string().optional().nullable(),
+      mouse: z.string().optional().nullable(),
+      chargerAdapter: z.string().optional().nullable(),
+      otherHardware: z.string().optional().nullable(),
+      operatingSystem: z.string().optional().nullable(),
+      operatingSystemVersion: z.string().optional().nullable(),
+      macAddress: z.string().optional().nullable(),
+      ipAddress: z.string().optional().nullable(),
+      batteryHealth: z.string().optional().nullable(),
+      additionalSpecifications: z.string().optional().nullable(),
     })
     .optional(),
 });
 
 export const AssetUpdateSchema = AssetCreateSchema.partial();
+
+export const AssetHardwareUpdateSchema = z.object({
+  cpu: z.string().optional().nullable(),
+  ram: z.string().optional().nullable(),
+  storage: z.string().optional().nullable(),
+  monitor: z.string().optional().nullable(),
+  keyboard: z.string().optional().nullable(),
+  mouse: z.string().optional().nullable(),
+  chargerAdapter: z.string().optional().nullable(),
+  otherHardware: z.string().optional().nullable(),
+  reason: z.string().optional().nullable(),
+});
 
 export const AssetAssignmentSchema = z.object({
   employeeId: z.string().min(1, 'Employee is required'),

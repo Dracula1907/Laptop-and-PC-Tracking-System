@@ -4,7 +4,8 @@ datasource db {
 }
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 enum EmployeeStatus {
@@ -341,12 +342,17 @@ model AssetSpecification {
   id                       String   @id @default(uuid())
   assetId                  String   @unique
   asset                    Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  processor                String?
-  ram                      String?
-  storage                  String?
+  processor                String?  // CPU
+  ram                      String?  // RAM
+  storage                  String?  // Storage (e.g. 512 GB SSD)
   storageType              String?
   gpu                      String?
   displaySize              String?
+  monitor                  String?  // Monitor (e.g. Dell 24")
+  keyboard                 String?  // Keyboard (e.g. Dell USB)
+  mouse                    String?  // Mouse (e.g. Dell USB)
+  chargerAdapter           String?  // Charger / Adapter (e.g. 65W)
+  otherHardware            String?  // Other Hardware
   operatingSystem          String?
   operatingSystemVersion   String?
   macAddress               String?

@@ -40,6 +40,15 @@ export class AssetController {
     }
   }
 
+  static async updateHardware(req: AuthenticatedRequest, res: Response) {
+    try {
+      const asset = await AssetService.updateHardware(req.params.id, req.body, req.user!.userId);
+      return res.status(200).json({ success: true, data: asset, message: 'Hardware configuration updated successfully.' });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   static async assignAsset(req: AuthenticatedRequest, res: Response) {
     try {
       const assignment = await AssetService.assignAsset(req.params.id, req.body, req.user!.userId);

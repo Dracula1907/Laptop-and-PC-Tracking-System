@@ -107,6 +107,11 @@ export interface AssetSpecification {
   storageType?: string;
   gpu?: string;
   displaySize?: string;
+  monitor?: string;
+  keyboard?: string;
+  mouse?: string;
+  chargerAdapter?: string;
+  otherHardware?: string;
   operatingSystem?: string;
   operatingSystemVersion?: string;
   macAddress?: string;
@@ -119,7 +124,9 @@ export interface Asset {
   id: string;
   assetCode: string;
   companyAssetId?: string;
+  sourceAssetId?: string;
   assetName?: string;
+  assetDescription?: string;
   assetType: AssetType;
   assetNumber?: string;
   laptopNumber?: string;
@@ -135,7 +142,17 @@ export interface Asset {
   sourceAllocationStatus?: string;
   sourceAssetType?: string;
   allocationStatus?: AllocationStatus;
-  criticality?: AssetCriticality;
+  criticality?: AssetCriticality | string;
+
+  location?: string | Location;
+  locationRel?: Location | string;
+  employeeNameSource?: string;
+  lanIp?: string;
+  ram?: string;
+  cpu?: string;
+  lanMacAddress?: string;
+  dateOfAllocation?: string;
+  dateOfDeallocation?: string;
 
   holderType?: HolderType;
   holderDisplayName?: string;
@@ -149,7 +166,6 @@ export interface Asset {
   departmentId?: string;
   department?: Department;
   locationId?: string;
-  location?: Location;
 
   importBatchId?: string;
   sourceRowNumber?: number;

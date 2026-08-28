@@ -42,8 +42,59 @@ export const exportToExcel = (data: any[], filename: string, sheetName: string =
  */
 export const exportModuleToExcel = (records: any[], moduleName: string) => {
   const dateStr = new Date().toISOString().slice(0, 10);
-  const filename = `FAITH_ITAM_${moduleName}_${dateStr}`;
+  const filename = `FAITH_Automation_${moduleName}_${dateStr}`;
   exportToExcel(records, filename, moduleName);
+};
+
+/**
+ * 16-Column Official Company Asset Inventory Excel Exporter
+ */
+export const exportAssetsToCompanyExcel = (assets: any[], customFilename?: string) => {
+  if (!assets || assets.length === 0) {
+    throw new Error('No assets available to export.');
+  }
+
+  const rows = assets.map((a) => {
+    const area = a.location || a.department?.name || a.locationRel?.name || '';
+    const allocStatus =
+      a.sourceAllocationStatus ||
+      (a.allocationStatus === 'ALLOCATED' ? 'Allocated' : 'Not Allocated');
+    const holder = a.employeeNameSource || a.currentHolder?.fullName || a.holderDisplayName || '';
+    const ip = a.lanIp || a.specifications?.ipAddress || '';
+    const ram = a.ram || a.specifications?.ram || '';
+    const cpu = a.cpu || a.specifications?.processor || '';
+    const mac = a.lanMacAddress || a.specifications?.macAddress || '';
+
+    const allocDate = a.dateOfAllocation
+      ? new Date(a.dateOfAllocation).toISOString().slice(0, 10)
+      : '';
+    const deallocDate = a.dateOfDeallocation
+      ? new Date(a.dateOfDeallocation).toISOString().slice(0, 10)
+      : '';
+
+    return {
+      'Asset ID': a.companyAssetId || a.assetCode || '',
+      'Asset Name': a.assetName || a.model || '',
+      'Asset Description': a.assetDescription || a.description || '',
+      "Manufacturer's Serial Number": a.serialNumber || '',
+      'Asset Type': a.sourceAssetType || a.assetType || '',
+      'Asset Status': a.sourceAssetStatus || a.status || '',
+      Location: area,
+      'Allocation status': allocStatus,
+      'Criticality of Asset': a.criticality || '',
+      'Employee Name': holder,
+      'LAN IP': ip,
+      RAM: ram,
+      'Date of allocation': allocDate,
+      'Date of deallocation': deallocDate,
+      CPU: cpu,
+      'LAN Mac Address': mac,
+    };
+  });
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const filename = customFilename || `FAITH_Automation_IT_Inventory_${dateStr}`;
+  exportToExcel(rows, filename, 'IT Assets');
 };
 
 /**
@@ -68,28 +119,3 @@ export const exportToPDF = (title: string, headers: string[], rows: any[][], fil
   doc.save(safeFilename);
 };
 
-// Deprecated CSV exporter retained only for backwards compatibility with any non-report legacy imports
-export const exportToCSV = (data: any[], filename: string) => {
-  if (!data || !data.length) return;
-  const keys = Object.keys(data[0]);
-  const csvRows = [];
-  csvRows.push(keys.join(','));
-
-  for (const row of data) {
-    const values = keys.map((key) => {
-      const val = row[key];
-      const escaped = ('' + (val ?? '')).replace(/"/g, '""');
-      return `"${escaped}"`;
-    });
-    csvRows.push(values.join(','));
-  }
-
-  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.setAttribute('href', url);
-  link.setAttribute('download', `${filename}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};

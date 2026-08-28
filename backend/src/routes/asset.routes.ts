@@ -20,6 +20,7 @@ router.get('/:id', requirePermission('ASSET_VIEW'), AssetController.getAssetById
 router.get('/:id/history', requirePermission('ASSET_VIEW'), AssetController.getAssetHistory);
 router.post('/', requirePermission('ASSET_CREATE'), AssetController.createAsset);
 router.put('/:id', requirePermission('ASSET_UPDATE'), AssetController.updateAsset);
+router.put('/:id/hardware', requirePermission('ASSET_UPDATE'), AssetController.updateHardware);
 router.delete('/:id', requirePermission('ASSET_DELETE'), AssetController.deleteAsset);
 
 router.post('/:id/assign', requirePermission('ASSIGNMENT_CREATE'), AssetController.assignAsset);

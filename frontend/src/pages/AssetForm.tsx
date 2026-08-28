@@ -151,10 +151,10 @@ export const AssetForm: React.FC = () => {
     if (!formData.assetName?.trim()) {
       errs.assetName = 'Asset Name is required (e.g. Dell 5440)';
     }
-    if (formData.lanIp && !/^(\d{1,3}\.){3}\d{1,3}$/.test(formData.lanIp.trim())) {
+    if (formData.lanIp && formData.lanIp.trim() && !/^(\d{1,3}\.){3}\d{1,3}$/.test(formData.lanIp.trim())) {
       errs.lanIp = 'Enter a valid IPv4 address (e.g. 192.168.1.50)';
     }
-    if (formData.lanMacAddress && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(formData.lanMacAddress.trim())) {
+    if (formData.lanMacAddress && formData.lanMacAddress.trim() && !/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(formData.lanMacAddress.trim())) {
       errs.lanMacAddress = 'Enter a valid MAC address (e.g. 00:1A:2B:3C:4D:5E)';
     }
     setErrors(errs);
