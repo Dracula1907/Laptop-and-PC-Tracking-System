@@ -16,6 +16,8 @@ import importRoutes from './import.routes';
 import assignmentRoutes from './assignment.routes';
 import transferRoutes from './transfer.routes';
 import returnRoutes from './return.routes';
+import approvalRoutes from './approval.routes';
+import warrantyRoutes from './warranty.routes';
 
 const router = Router();
 
@@ -25,6 +27,8 @@ router.use('/assets', assetRoutes);
 router.use('/assignments', assignmentRoutes);
 router.use('/transfers', transferRoutes);
 router.use('/returns', returnRoutes);
+router.use('/approvals', approvalRoutes);
+router.use('/warranties', warrantyRoutes);
 router.use('/employees', employeeRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/locations', locationRoutes);
@@ -38,3 +42,4 @@ router.use('/settings', settingRoutes);
 router.use('/import', importRoutes);
 
 export default router;
+

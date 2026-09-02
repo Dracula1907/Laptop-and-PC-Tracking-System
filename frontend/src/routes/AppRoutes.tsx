@@ -13,6 +13,8 @@ import { Assignments } from '../pages/Assignments';
 import { Transfers } from '../pages/Transfers';
 import { Returns } from '../pages/Returns';
 import { Maintenance } from '../pages/Maintenance';
+import { ApprovalCenter } from '../pages/ApprovalCenter';
+import { WarrantyManagement } from '../pages/WarrantyManagement';
 import { Employees } from '../pages/Employees';
 import { EmployeeDetail } from '../pages/EmployeeDetail';
 import { Departments } from '../pages/Departments';
@@ -46,6 +48,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/transfers" element={<Transfers />} />
           <Route path="/returns" element={<Returns />} />
           <Route path="/maintenance" element={<Maintenance />} />
+          <Route path="/approvals" element={<ApprovalCenter />} />
+          <Route path="/warranties" element={<WarrantyManagement />} />
 
           <Route path="/employees" element={<Employees />} />
           <Route path="/employees/:id" element={<EmployeeDetail />} />

@@ -94,6 +94,15 @@ export class AssetController {
     }
   }
 
+  static async deactivateAsset(req: AuthenticatedRequest, res: Response) {
+    try {
+      const result = await AssetService.deactivateAsset(req.params.id, req.user!.userId);
+      return res.status(200).json({ success: true, data: result, message: result.message });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   static async getDepartments(_req: AuthenticatedRequest, res: Response) {
     try {
       const departments = await AssetService.getDistinctDepartments();
@@ -103,10 +112,55 @@ export class AssetController {
     }
   }
 
+  static async getLocations(_req: AuthenticatedRequest, res: Response) {
+    try {
+      const locations = await AssetService.getDistinctLocations();
+      return res.status(200).json({ success: true, data: locations });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getInventoryCounts(_req: AuthenticatedRequest, res: Response) {
+    try {
+      const counts = await AssetService.getInventoryCounts();
+      return res.status(200).json({ success: true, data: counts });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   static async getAssetHistory(req: AuthenticatedRequest, res: Response) {
     try {
       const history = await HistoryService.getAssetHistory(req.params.id, req.query);
       return res.status(200).json({ success: true, data: history });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async getAssetHistorySummary(req: AuthenticatedRequest, res: Response) {
+    try {
+      const summary = await HistoryService.getAssetHistorySummary(req.params.id);
+      return res.status(200).json({ success: true, data: summary });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async recordHistoryCorrection(req: AuthenticatedRequest, res: Response) {
+    try {
+      const correction = await HistoryService.recordCorrection(
+        req.params.id,
+        req.params.historyId,
+        req.body,
+        req.user!.userId
+      );
+      return res.status(201).json({
+        success: true,
+        data: correction,
+        message: 'Administrative correction recorded successfully. Original history entry preserved.',
+      });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: error.message });
     }

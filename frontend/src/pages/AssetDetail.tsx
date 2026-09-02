@@ -9,7 +9,9 @@ import { Select } from '../components/Select';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
-import { exportToExcel } from '../utils/exporters';
+import { StatusBadge } from '../components/StatusBadge';
+import { exportToExcel, exportAssetHistoryToExcel } from '../utils/exporters';
+import { AssetStatusHistory, AssetHistorySummary } from '../types';
 import {
   Edit,
   UserCheck,
@@ -27,6 +29,23 @@ import {
   ShieldCheck,
   Trash2,
   Cpu,
+  LayoutList,
+  Columns,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  CheckCircle2,
+  AlertTriangle,
+  Tag,
+  SlidersHorizontal,
+  RefreshCw,
+  Building,
+  MapPin,
+  Check,
+  ShieldAlert,
+  Receipt,
+  Plus,
 } from 'lucide-react';
 
 export const AssetDetail: React.FC = () => {
@@ -39,13 +58,39 @@ export const AssetDetail: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [employees, setEmployees] = useState<any[]>([]);
 
-  // History states
-  const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
-  const [historyEvents, setHistoryEvents] = useState<any[]>([]);
+  // History & Warranty states
+  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'warranty'>('details');
+  const [assetWarranties, setAssetWarranties] = useState<any[]>([]);
+  const [warrantyLoading, setWarrantyLoading] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'timeline' | 'table'>('timeline');
+  const [historyEvents, setHistoryEvents] = useState<AssetStatusHistory[]>([]);
+  const [historySummary, setHistorySummary] = useState<AssetHistorySummary | null>(null);
   const [lastMovement, setLastMovement] = useState<any | null>(null);
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
+  const [summaryLoading, setSummaryLoading] = useState<boolean>(false);
   const [historyFilterAction, setHistoryFilterAction] = useState<string>('');
   const [historySearch, setHistorySearch] = useState<string>('');
+  const [datePreset, setDatePreset] = useState<string>('ALL_TIME');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [historyPage, setHistoryPage] = useState<number>(1);
+  const [historyLimit, setHistoryLimit] = useState<number>(25);
+  const [historyTotalPages, setHistoryTotalPages] = useState<number>(1);
+  const [historyTotalCount, setHistoryTotalCount] = useState<number>(0);
+
+  // History Detail & Correction Modals
+  const [selectedEventForDetails, setSelectedEventForDetails] = useState<AssetStatusHistory | null>(null);
+  const [showEventDetailsModal, setShowEventDetailsModal] = useState<boolean>(false);
+  const [selectedEventForCorrection, setSelectedEventForCorrection] = useState<AssetStatusHistory | null>(null);
+  const [showCorrectionModal, setShowCorrectionModal] = useState<boolean>(false);
+  const [correctionForm, setCorrectionForm] = useState({
+    reason: '',
+    remarks: '',
+    newStatus: '',
+    newCondition: '',
+    newHolderId: '',
+  });
+  const [correctionLoading, setCorrectionLoading] = useState<boolean>(false);
 
   // Modals
   const [showAssignModal, setShowAssignModal] = useState<boolean>(false);
@@ -55,7 +100,6 @@ export const AssetDetail: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
   const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
   const [showRawData, setShowRawData] = useState<boolean>(false);
-
 
   const [showHardwareModal, setShowHardwareModal] = useState<boolean>(false);
   const [hardwareForm, setHardwareForm] = useState({
@@ -93,19 +137,46 @@ export const AssetDetail: React.FC = () => {
     }
   };
 
+  const fetchHistorySummary = async () => {
+    if (!id) return;
+    setSummaryLoading(true);
+    try {
+      const res: any = await api.get(`/assets/${id}/history/summary`);
+      const isSuccess = res?.success ?? res?.data?.success;
+      const data = res?.data ?? res;
+      if (isSuccess && data) {
+        setHistorySummary(data);
+      }
+    } catch (err) {
+      console.error('Failed to load history summary:', err);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
   const fetchHistory = async () => {
     if (!id) return;
     setHistoryLoading(true);
     try {
       const query = new URLSearchParams();
+      query.set('page', String(historyPage));
+      query.set('limit', String(historyLimit));
       if (historyFilterAction) query.set('action', historyFilterAction);
       if (historySearch) query.set('search', historySearch);
+      if (datePreset && datePreset !== 'ALL_TIME') query.set('datePreset', datePreset);
+      if (startDate) query.set('startDate', startDate);
+      if (endDate) query.set('endDate', endDate);
+
       const res: any = await api.get(`/assets/${id}/history?${query.toString()}`);
       const isSuccess = res?.success ?? res?.data?.success;
       const data = res?.data ?? res;
       if (isSuccess && data) {
         setHistoryEvents(data.events || []);
         if (data.lastMovement) setLastMovement(data.lastMovement);
+        if (data.pagination) {
+          setHistoryTotalCount(data.pagination.total || 0);
+          setHistoryTotalPages(data.pagination.totalPages || 1);
+        }
       }
     } catch (err) {
       console.error('Failed to load asset history:', err);
@@ -114,9 +185,51 @@ export const AssetDetail: React.FC = () => {
     }
   };
 
+  const handleCorrectionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEventForCorrection) return;
+    if (!correctionForm.reason.trim()) {
+      showToast('Please provide a detailed reason for the correction.', 'warning');
+      return;
+    }
+    setCorrectionLoading(true);
+    try {
+      await api.post(`/assets/${id}/history/${selectedEventForCorrection.id}/correction`, correctionForm);
+      showToast('Administrative correction recorded. Original event preserved.', 'success');
+      setShowCorrectionModal(false);
+      setSelectedEventForCorrection(null);
+      setCorrectionForm({ reason: '', remarks: '', newStatus: '', newCondition: '', newHolderId: '' });
+      fetchHistory();
+      fetchHistorySummary();
+      fetchAsset();
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to record correction.', 'error');
+    } finally {
+      setCorrectionLoading(false);
+    }
+  };
+
+  const fetchAssetWarranties = async () => {
+    if (!id) return;
+    setWarrantyLoading(true);
+    try {
+      const res: any = await api.get(`/warranties/asset/${id}`);
+      const isSuccess = res?.success ?? res?.data?.success;
+      const data = res?.data ?? res;
+      if (isSuccess && data) {
+        setAssetWarranties(data || []);
+      }
+    } catch (err) {
+      console.error('Failed to load asset warranties:', err);
+    } finally {
+      setWarrantyLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAsset();
-    fetchHistory();
+    fetchHistorySummary();
+    fetchAssetWarranties();
 
     const fetchEmps = async () => {
       try {
@@ -131,7 +244,7 @@ export const AssetDetail: React.FC = () => {
 
   useEffect(() => {
     fetchHistory();
-  }, [id, historyFilterAction, historySearch]);
+  }, [id, historyPage, historyLimit, historyFilterAction, historySearch, datePreset, startDate, endDate]);
 
   if (loading || !asset) {
     return (
@@ -235,27 +348,11 @@ export const AssetDetail: React.FC = () => {
       showToast('No history records available to export.', 'warning');
       return;
     }
-    const exportData = historyEvents.map((e: any) => ({
-      'Asset ID': asset.companyAssetId || asset.assetCode,
-      'Event Date': new Date(e.eventDate).toLocaleDateString('en-GB'),
-      'Event Time': new Date(e.eventDate).toLocaleTimeString('en-GB'),
-      'Event Type': e.action,
-      'Previous Holder': e.previousHolder || '—',
-      'New Holder': e.newHolder || '—',
-      'Previous Department': e.previousDepartment || '—',
-      'New Department': e.newDepartment || '—',
-      'Previous Location': e.previousLocation || '—',
-      'New Location': e.newLocation || '—',
-      'Previous Status': e.previousStatus || '—',
-      'New Status': e.newStatus || '—',
-      'Condition': e.newCondition || e.previousCondition || '—',
-      'Performed By': e.performedBy || 'System',
-      'Approved By': e.approvedBy || '—',
-      'Reason': e.reason || '—',
-      'Remarks': e.remarks || '—',
-    }));
-    exportToExcel(exportData, `FAITH_Asset_History_${asset.companyAssetId || asset.assetCode}`);
-    showToast('Asset history spreadsheet exported.', 'success');
+    exportAssetHistoryToExcel(
+      historyEvents,
+      asset?.companyAssetId || asset?.assetCode
+    );
+    showToast('Asset history (.xlsx) exported successfully.', 'success');
   };
 
   const handleDeleteAsset = async () => {
@@ -295,34 +392,51 @@ export const AssetDetail: React.FC = () => {
     switch (action) {
       case 'ASSET_CREATED':
       case 'CREATED':
-        return { label: 'Asset Registered', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20', dot: 'bg-cyan-400' };
+        return { label: 'Created', color: 'bg-blue-500/10 text-blue-400 border-blue-500/30', dot: 'bg-blue-500' };
+      case 'ASSET_IMPORTED':
+        return { label: 'Imported', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30', dot: 'bg-indigo-500' };
       case 'ASSIGNED':
-        return { label: 'Assigned', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-400' };
+      case 'ASSET_ASSIGNED':
+        return { label: 'Assigned', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30', dot: 'bg-cyan-500' };
+      case 'ASSIGNMENT_UPDATED':
+        return { label: 'Assignment Updated', color: 'bg-teal-500/10 text-teal-400 border-teal-500/30', dot: 'bg-teal-500' };
       case 'TRANSFERRED':
-        return { label: 'Transferred', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20', dot: 'bg-cyan-400' };
+      case 'ASSET_TRANSFERRED':
+        return { label: 'Transferred', color: 'bg-amber-500/10 text-amber-400 border-amber-500/30', dot: 'bg-amber-500' };
       case 'RETURNED':
-        return { label: 'Returned', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', dot: 'bg-blue-400' };
+      case 'ASSET_RETURNED':
+        return { label: 'Returned', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-500' };
+      case 'ASSET_RETURN_INITIATED':
+        return { label: 'Return Initiated', color: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20', dot: 'bg-emerald-400' };
+      case 'ASSET_INSPECTED':
+        return { label: 'Inspected', color: 'bg-purple-500/10 text-purple-400 border-purple-500/30', dot: 'bg-purple-500' };
+      case 'MAINTENANCE_OPENED':
       case 'MAINTENANCE_STARTED':
-        return { label: 'Maintenance Started', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20', dot: 'bg-amber-400' };
+        return { label: 'In Repair', color: 'bg-rose-500/10 text-rose-400 border-rose-500/30', dot: 'bg-rose-500' };
+      case 'MAINTENANCE_UPDATED':
+        return { label: 'Repair Updated', color: 'bg-rose-500/10 text-rose-300 border-rose-500/20', dot: 'bg-rose-400' };
       case 'MAINTENANCE_COMPLETED':
-        return { label: 'Maintenance Completed', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', dot: 'bg-emerald-400' };
+        return { label: 'Repair Completed', color: 'bg-green-500/10 text-green-400 border-green-500/30', dot: 'bg-green-500' };
+      case 'HARDWARE_CHANGED':
+        return { label: 'Hardware Updated', color: 'bg-sky-500/10 text-sky-400 border-sky-500/30', dot: 'bg-sky-500' };
       case 'STATUS_CHANGED':
-        return { label: 'Status Changed', color: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20', dot: 'bg-indigo-400' };
+        return { label: 'Status Changed', color: 'bg-violet-500/10 text-violet-400 border-violet-500/30', dot: 'bg-violet-500' };
       case 'CONDITION_CHANGED':
-        return { label: 'Condition Changed', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20', dot: 'bg-purple-400' };
-      case 'DEPARTMENT_CHANGED':
-        return { label: 'Department Changed', color: 'bg-teal-500/10 text-teal-400 border-teal-500/20', dot: 'bg-teal-400' };
+        return { label: 'Condition Changed', color: 'bg-orange-500/10 text-orange-400 border-orange-500/30', dot: 'bg-orange-500' };
       case 'LOCATION_CHANGED':
-        return { label: 'Location Changed', color: 'bg-sky-500/10 text-sky-400 border-sky-500/20', dot: 'bg-sky-400' };
-      case 'DAMAGED':
-        return { label: 'Damaged', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20', dot: 'bg-rose-400' };
-      case 'LOST':
-      case 'SCRAPPED':
-        return { label: action.replace('_', ' '), color: 'bg-red-500/10 text-red-400 border-red-500/20', dot: 'bg-red-400' };
+        return { label: 'Location Changed', color: 'bg-lime-500/10 text-lime-400 border-lime-500/30', dot: 'bg-lime-500' };
+      case 'DEPARTMENT_CHANGED':
+        return { label: 'Dept Changed', color: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/30', dot: 'bg-fuchsia-500' };
+      case 'HOLDER_CHANGED':
+      case 'EMPLOYEE_CHANGED':
+        return { label: 'Holder Changed', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30', dot: 'bg-cyan-500' };
+      case 'ASSET_DEACTIVATED':
       case 'RETIRED':
-        return { label: 'Retired', color: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', dot: 'bg-zinc-400' };
+        return { label: 'Deactivated', color: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30', dot: 'bg-zinc-500' };
+      case 'CORRECTION_RECORDED':
+        return { label: 'Correction', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30', dot: 'bg-yellow-500' };
       default:
-        return { label: action.replace('_', ' '), color: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20', dot: 'bg-zinc-400' };
+        return { label: action.replace(/_/g, ' '), color: 'bg-zinc-800 text-zinc-300 border-zinc-700', dot: 'bg-zinc-400' };
     }
   };
 
@@ -467,101 +581,220 @@ export const AssetDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* ══ SUMMARY CARDS: CURRENT STATE & LAST ACTIVITY ══ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* CURRENT STATE CARD */}
-        <div className="bg-bgElevated border border-borderBase rounded-xl p-4 relative overflow-hidden">
-          <div className="flex items-center justify-between border-b border-borderBase pb-2.5 mb-3">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-400 flex items-center">
-              <User className="w-3.5 h-3.5 mr-1.5" />
-              Current State
-            </span>
-            <span className="text-[11px] text-textSecondary font-mono">
-              Status: <strong className="text-textPrimary">{asset.status}</strong>
-            </span>
-          </div>
+      {/* ══ SUMMARY CARDS: CURRENT STATE, LIFECYCLE & CHAIN OF CUSTODY ══ */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* CARD 1: CURRENT STATE & CUSTODIAN */}
+        <div className="bg-bgElevated border border-borderBase rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-borderBase pb-2.5 mb-3">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-cyan-400 flex items-center">
+                <User className="w-3.5 h-3.5 mr-1.5" />
+                Current Custodian & State
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-cyan-950/60 text-cyan-400 border border-cyan-800">
+                {asset.status}
+              </span>
+            </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <span className="text-[10px] text-textSecondary uppercase block">Assigned To</span>
-              <p className="text-sm font-bold text-textPrimary mt-0.5 truncate">
-                {asset.currentHolder?.fullName || asset.employeeNameSource || asset.holderDisplayName || 'IT STOCK'}
-              </p>
-            </div>
-            <div>
-              <span className="text-[10px] text-textSecondary uppercase block">Department / Area</span>
-              <p className="text-sm font-semibold text-textPrimary mt-0.5 truncate">
-                {asset.department?.name || asset.location || '—'}
-              </p>
-            </div>
-            <div>
-              <span className="text-[10px] text-textSecondary uppercase block">Current Location</span>
-              <p className="text-xs text-textSecondary mt-0.5 truncate">
-                {asset.locationRel?.name || asset.location || 'IT Area'}
-              </p>
-            </div>
-            <div>
-              <span className="text-[10px] text-textSecondary uppercase block">Assigned Since</span>
-              <p className="text-xs font-mono text-cyan-400 mt-0.5">
-                {allocDateFormatted !== '—'
-                  ? allocDateFormatted
-                  : lastMovement?.eventDate
-                  ? new Date(lastMovement.eventDate).toLocaleDateString('en-GB')
-                  : '—'}
-              </p>
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-textSecondary text-[11px]">Custodian:</span>
+                <span className="font-bold text-textPrimary truncate max-w-[180px]">
+                  {asset.currentHolder?.fullName || asset.employeeNameSource || 'IT STOCK'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-textSecondary text-[11px]">Department:</span>
+                <span className="font-medium text-textPrimary truncate max-w-[180px]">
+                  {asset.department?.name || asset.location || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-textSecondary text-[11px]">Facility Location:</span>
+                <span className="font-medium text-textPrimary truncate max-w-[180px]">
+                  {asset.locationRel?.name || asset.location || 'Pune Facility, India'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-textSecondary text-[11px]">Physical Condition:</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-zinc-800 text-zinc-300 font-mono">
+                  {asset.condition || 'GOOD'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-textSecondary text-[11px]">Allocation Status:</span>
+                <span className="font-semibold text-cyan-400 font-mono text-[11px]">
+                  {asset.allocationStatus === 'ALLOCATED' ? 'ALLOCATED' : 'NOT ALLOCATED'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* LAST ACTIVITY CARD */}
-        <div className="bg-bgElevated border border-borderBase rounded-xl p-4 relative overflow-hidden">
-          <div className="flex items-center justify-between border-b border-borderBase pb-2.5 mb-3">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center">
-              <Clock className="w-3.5 h-3.5 mr-1.5" />
-              Last Movement / Activity
-            </span>
-            {lastMovement?.action && (
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                {lastMovement.action.replace('_', ' ')}
+        {/* CARD 2: LIFECYCLE & ACTIVITY MILESTONES */}
+        <div className="bg-bgElevated border border-borderBase rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-borderBase pb-2.5 mb-3">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center">
+                <Clock className="w-3.5 h-3.5 mr-1.5" />
+                Activity Milestones
               </span>
-            )}
-          </div>
+              <span className="text-[10px] text-textSecondary font-mono">
+                Total Events: <strong className="text-textPrimary">{historySummary?.totalEvents ?? historyTotalCount}</strong>
+              </span>
+            </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <span className="text-[10px] text-textSecondary uppercase block">Date & Time</span>
-              <p className="text-xs font-mono text-textPrimary mt-0.5">
-                {lastMovement?.eventDate
-                  ? `${new Date(lastMovement.eventDate).toLocaleDateString('en-GB')} ${new Date(lastMovement.eventDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
-                  : '—'}
-              </p>
-            </div>
-            <div>
-              <span className="text-[10px] text-textSecondary uppercase block">Performed By</span>
-              <p className="text-xs font-semibold text-textPrimary mt-0.5">
-                {lastMovement?.performedBy || 'System Admin'}
-              </p>
-            </div>
-            <div className="col-span-2 bg-bgBase p-2 rounded border border-borderBase flex items-center justify-between text-[11px]">
-              <div className="min-w-0 pr-2">
-                <span className="text-[10px] text-textSecondary block">From:</span>
-                <span className="font-semibold text-rose-300 truncate block">{lastMovement?.previousHolder || 'IT STOCK'}</span>
-                {lastMovement?.previousDepartment && lastMovement.previousDepartment !== '—' && (
-                  <span className="text-textSecondary text-[10px] truncate block">({lastMovement.previousDepartment})</span>
-                )}
+            <div className="space-y-3 text-xs">
+              <div>
+                <span className="text-[10px] text-textSecondary uppercase block font-medium">Initial Registration / Import</span>
+                <p className="text-xs font-mono text-textPrimary mt-0.5">
+                  {historySummary?.firstActivity?.date
+                    ? new Date(historySummary.firstActivity.date).toLocaleString('en-GB')
+                    : new Date(asset.createdAt).toLocaleString('en-GB')}
+                </p>
+                <p className="text-[10.5px] text-textSecondary truncate">
+                  By: {historySummary?.firstActivity?.performedBy || 'System Admin'}
+                </p>
               </div>
-              <ArrowRight className="w-4 h-4 text-cyan-400 mx-2 shrink-0" />
-              <div className="min-w-0 pl-2 text-right">
-                <span className="text-[10px] text-textSecondary block">To:</span>
-                <span className="font-semibold text-emerald-300 truncate block">{lastMovement?.newHolder || 'IT STOCK'}</span>
-                {lastMovement?.newDepartment && lastMovement.newDepartment !== '—' && (
-                  <span className="text-textSecondary text-[10px] truncate block">({lastMovement.newDepartment})</span>
-                )}
+
+              <div className="border-t border-borderBase pt-2">
+                <span className="text-[10px] text-textSecondary uppercase block font-medium">Latest Activity</span>
+                <p className="text-xs font-mono text-cyan-400 mt-0.5">
+                  {historySummary?.lastActivity?.date
+                    ? new Date(historySummary.lastActivity.date).toLocaleString('en-GB')
+                    : lastMovement?.eventDate
+                    ? new Date(lastMovement.eventDate).toLocaleString('en-GB')
+                    : '—'}
+                </p>
+                <p className="text-[10.5px] text-textSecondary truncate">
+                  {historySummary?.lastActivity?.description || lastMovement?.remarks || 'Operational Event'}
+                </p>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* CARD 3: CHAIN OF CUSTODY SUMMARY */}
+        <div className="bg-bgElevated border border-borderBase rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-borderBase pb-2.5 mb-3">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center">
+                <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
+                Custody Accountability
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono">
+                Audit Verified
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center mb-3">
+              <div className="bg-bgBase p-2 rounded border border-borderBase">
+                <span className="text-[10px] text-textSecondary uppercase block">Assigns</span>
+                <span className="text-base font-bold text-cyan-400 font-mono">
+                  {historySummary?.custodySummary?.totalAssignments ?? 0}
+                </span>
+              </div>
+              <div className="bg-bgBase p-2 rounded border border-borderBase">
+                <span className="text-[10px] text-textSecondary uppercase block">Transfers</span>
+                <span className="text-base font-bold text-amber-400 font-mono">
+                  {historySummary?.custodySummary?.totalTransfers ?? 0}
+                </span>
+              </div>
+              <div className="bg-bgBase p-2 rounded border border-borderBase">
+                <span className="text-[10px] text-textSecondary uppercase block">Returns</span>
+                <span className="text-base font-bold text-emerald-400 font-mono">
+                  {historySummary?.custodySummary?.totalReturns ?? 0}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <span className="text-[10px] text-textSecondary uppercase block font-semibold mb-1">
+                Previous Custodians ({historySummary?.custodySummary?.previousCustodians?.length ?? 0})
+              </span>
+              {historySummary?.custodySummary?.previousCustodians && historySummary.custodySummary.previousCustodians.length > 0 ? (
+                <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+                  {historySummary.custodySummary.previousCustodians.map((c) => (
+                    <span
+                      key={c.id}
+                      className="px-2 py-0.5 rounded text-[10px] bg-bgBase border border-borderBase text-textSecondary"
+                      title={`Seen ${c.count} time(s)`}
+                    >
+                      {c.name} ({c.code})
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[11px] text-textSecondary italic">No previous employee custodians recorded.</span>
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* ══ DEDICATED PROMINENT WARRANTY BANNER SECTION ══ */}
+      {assetWarranties.length > 0 ? (
+        <div className="bg-[#0E131F] border border-indigo-500/30 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-[0_0_15px_rgba(99,102,241,0.08)]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-5 h-5 text-indigo-400" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white font-mono uppercase">
+                  Hardware Warranty Coverage
+                </span>
+                <StatusBadge status={assetWarranties[0].computedStatus || assetWarranties[0].status} />
+                <span className="px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 font-mono text-[10px] font-bold border border-indigo-800">
+                  {assetWarranties[0].warrantyCode}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Provider: <strong className="text-slate-200">{assetWarranties[0].provider}</strong> | Valid until{' '}
+                <strong className="text-white font-mono">{new Date(assetWarranties[0].endDate).toLocaleDateString('en-GB')}</strong>{' '}
+                {assetWarranties[0].daysRemaining !== undefined && (
+                  <span className="ml-1 text-amber-300 font-mono">
+                    ({assetWarranties[0].daysRemaining < 0 ? `Expired ${Math.abs(assetWarranties[0].daysRemaining)}d ago` : `${assetWarranties[0].daysRemaining}d remaining`})
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setActiveTab('warranty')}
+              className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-950/30"
+            >
+              View Warranty Details
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate('/warranties')}
+            >
+              Open Warranty Center &rarr;
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-[#0E131F] border border-[#1E2535] rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-slate-500" />
+            <span className="text-xs text-slate-400">
+              No active warranty contract registered for this asset.
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/warranties')}
+          >
+            Register Warranty
+          </Button>
+        </div>
+      )}
 
       {/* ══ INTERACTIVE TAB BAR ══ */}
       <div className="flex items-center space-x-2 border-b border-borderBase">
@@ -588,6 +821,22 @@ export const AssetDetail: React.FC = () => {
           <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-cyan-950 text-cyan-400 border border-cyan-800 font-mono">
             {historyEvents.length}
           </span>
+        </button>
+        <button
+          onClick={() => setActiveTab('warranty')}
+          className={`px-4 py-2.5 text-xs font-bold rounded-t-lg transition-all flex items-center gap-1.5 ${
+            activeTab === 'warranty'
+              ? 'bg-bgElevated text-indigo-400 border-t-2 border-indigo-400 border-x border-borderBase'
+              : 'text-textSecondary hover:text-textPrimary hover:bg-bgElevated/40'
+          }`}
+        >
+          <ShieldAlert className="w-3.5 h-3.5 text-indigo-400" />
+          Warranty & Service Contracts
+          {assetWarranties.length > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono">
+              {assetWarranties.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -857,221 +1106,732 @@ export const AssetDetail: React.FC = () => {
       {/* ══ TAB 2: COMPLETE ASSET HISTORY / CHAIN OF CUSTODY ══ */}
       {activeTab === 'history' && (
         <div className="space-y-6">
-          {/* History Control & Filter Bar */}
-          <div className="bg-bgElevated border border-borderBase rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center space-x-3 flex-1 min-w-[280px]">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="w-4 h-4 text-textSecondary absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={historySearch}
-                  onChange={(e) => setHistorySearch(e.target.value)}
-                  placeholder="Search holders, departments, reasons..."
-                  className="w-full bg-bgBase border border-borderBase rounded-lg pl-9 pr-3 py-1.5 text-xs text-textPrimary placeholder:text-textSecondary focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div className="w-48">
-                <Select
-                  value={historyFilterAction}
-                  onChange={(e) => setHistoryFilterAction(e.target.value)}
-                  options={[
-                    { value: '', label: 'All Event Types' },
-                    { value: 'ASSIGNED', label: 'Assigned' },
-                    { value: 'TRANSFERRED', label: 'Transferred' },
-                    { value: 'RETURNED', label: 'Returned' },
-                    { value: 'MAINTENANCE_STARTED,MAINTENANCE_COMPLETED', label: 'Maintenance' },
-                    { value: 'STATUS_CHANGED,CONDITION_CHANGED', label: 'Status / Condition' },
-                    { value: 'ASSET_CREATED,CREATED', label: 'Registration' },
-                  ]}
-                />
-              </div>
-            </div>
-
-            <Button
-              variant="secondary"
-              onClick={handleExportHistory}
-              className="text-xs text-textPrimary hover:border-emerald-500/50"
+          {/* 1. Dynamic Telemetry Counter Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            <button
+              onClick={() => { setHistoryFilterAction(''); setHistoryPage(1); }}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                historyFilterAction === ''
+                  ? 'bg-cyan-950/40 border-cyan-500/50 shadow-[0_0_12px_rgba(6,182,212,0.15)]'
+                  : 'bg-bgElevated border-borderBase hover:border-zinc-700'
+              }`}
             >
-              <FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-400" />
-              Export History (Excel)
-            </Button>
+              <span className="text-[10px] text-textSecondary uppercase font-medium block">Total Events</span>
+              <span className="text-xl font-bold font-mono text-cyan-400 mt-1 block">
+                {historySummary?.totalEvents ?? historyTotalCount}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setHistoryFilterAction('ASSIGNED,ASSET_ASSIGNED,ASSIGNMENT_UPDATED'); setHistoryPage(1); }}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                historyFilterAction.includes('ASSIGNED')
+                  ? 'bg-blue-950/40 border-blue-500/50 shadow-[0_0_12px_rgba(59,130,246,0.15)]'
+                  : 'bg-bgElevated border-borderBase hover:border-zinc-700'
+              }`}
+            >
+              <span className="text-[10px] text-textSecondary uppercase font-medium block">Assignments</span>
+              <span className="text-xl font-bold font-mono text-blue-400 mt-1 block">
+                {historySummary?.assignments ?? 0}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setHistoryFilterAction('TRANSFERRED,ASSET_TRANSFERRED'); setHistoryPage(1); }}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                historyFilterAction.includes('TRANSFERRED')
+                  ? 'bg-amber-950/40 border-amber-500/50 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
+                  : 'bg-bgElevated border-borderBase hover:border-zinc-700'
+              }`}
+            >
+              <span className="text-[10px] text-textSecondary uppercase font-medium block">Transfers</span>
+              <span className="text-xl font-bold font-mono text-amber-400 mt-1 block">
+                {historySummary?.transfers ?? 0}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setHistoryFilterAction('RETURNED,ASSET_RETURNED,ASSET_RETURN_INITIATED'); setHistoryPage(1); }}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                historyFilterAction.includes('RETURNED')
+                  ? 'bg-emerald-950/40 border-emerald-500/50 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                  : 'bg-bgElevated border-borderBase hover:border-zinc-700'
+              }`}
+            >
+              <span className="text-[10px] text-textSecondary uppercase font-medium block">Returns</span>
+              <span className="text-xl font-bold font-mono text-emerald-400 mt-1 block">
+                {historySummary?.returns ?? 0}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setHistoryFilterAction('MAINTENANCE_OPENED,MAINTENANCE_STARTED,MAINTENANCE_UPDATED,MAINTENANCE_COMPLETED'); setHistoryPage(1); }}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                historyFilterAction.includes('MAINTENANCE')
+                  ? 'bg-rose-950/40 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.15)]'
+                  : 'bg-bgElevated border-borderBase hover:border-zinc-700'
+              }`}
+            >
+              <span className="text-[10px] text-textSecondary uppercase font-medium block">Maintenance</span>
+              <span className="text-xl font-bold font-mono text-rose-400 mt-1 block">
+                {historySummary?.maintenanceEvents ?? 0}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setHistoryFilterAction('CONDITION_CHANGED'); setHistoryPage(1); }}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                historyFilterAction === 'CONDITION_CHANGED'
+                  ? 'bg-purple-950/40 border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
+                  : 'bg-bgElevated border-borderBase hover:border-zinc-700'
+              }`}
+            >
+              <span className="text-[10px] text-textSecondary uppercase font-medium block">Condition Diffs</span>
+              <span className="text-xl font-bold font-mono text-purple-400 mt-1 block">
+                {historySummary?.conditionChanges ?? 0}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setHistoryFilterAction('LOCATION_CHANGED,DEPARTMENT_CHANGED'); setHistoryPage(1); }}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                historyFilterAction.includes('LOCATION')
+                  ? 'bg-lime-950/40 border-lime-500/50 shadow-[0_0_12px_rgba(132,204,22,0.15)]'
+                  : 'bg-bgElevated border-borderBase hover:border-zinc-700'
+              }`}
+            >
+              <span className="text-[10px] text-textSecondary uppercase font-medium block">Location Diffs</span>
+              <span className="text-xl font-bold font-mono text-lime-400 mt-1 block">
+                {historySummary?.locationChanges ?? 0}
+              </span>
+            </button>
           </div>
 
+          {/* 2. Control Bar: Search, Filters, Presets, View Switcher & Export */}
+          <div className="bg-bgElevated border border-borderBase rounded-xl p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center space-x-3 flex-1 min-w-[280px]">
+                {/* Search */}
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-4 h-4 text-textSecondary absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={historySearch}
+                    onChange={(e) => { setHistorySearch(e.target.value); setHistoryPage(1); }}
+                    placeholder="Search holder, dept, remarks, record code..."
+                    className="w-full bg-bgBase border border-borderBase rounded-lg pl-9 pr-3 py-1.5 text-xs text-textPrimary placeholder:text-textSecondary focus:outline-none focus:border-cyan-400"
+                  />
+                  {historySearch && (
+                    <button
+                      onClick={() => { setHistorySearch(''); setHistoryPage(1); }}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-textSecondary hover:text-textPrimary text-xs"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Event Type Filter */}
+                <div className="w-52">
+                  <Select
+                    value={historyFilterAction}
+                    onChange={(e) => { setHistoryFilterAction(e.target.value); setHistoryPage(1); }}
+                    options={[
+                      { value: '', label: 'All Event Types' },
+                      { value: 'ASSIGNED,ASSET_ASSIGNED,ASSIGNMENT_UPDATED', label: 'Assignments' },
+                      { value: 'TRANSFERRED,ASSET_TRANSFERRED', label: 'Transfers' },
+                      { value: 'RETURNED,ASSET_RETURNED,ASSET_RETURN_INITIATED', label: 'Returns' },
+                      { value: 'MAINTENANCE_OPENED,MAINTENANCE_STARTED,MAINTENANCE_UPDATED,MAINTENANCE_COMPLETED', label: 'Maintenance' },
+                      { value: 'HARDWARE_CHANGED', label: 'Hardware Changes' },
+                      { value: 'STATUS_CHANGED,CONDITION_CHANGED', label: 'Status / Condition' },
+                      { value: 'LOCATION_CHANGED,DEPARTMENT_CHANGED', label: 'Location / Dept' },
+                      { value: 'CORRECTION_RECORDED', label: 'Admin Corrections' },
+                      { value: 'ASSET_CREATED,CREATED,ASSET_IMPORTED', label: 'Creation / Import' },
+                      { value: 'ASSET_DEACTIVATED,RETIRED', label: 'Deactivated / Retired' },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              {/* View Switcher, Limit, & Excel Export */}
+              <div className="flex items-center space-x-2">
+                {/* View Switcher Toggle */}
+                <div className="flex items-center bg-bgBase border border-borderBase rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode('timeline')}
+                    className={`flex items-center px-2.5 py-1 rounded text-xs font-semibold transition-all ${
+                      viewMode === 'timeline'
+                        ? 'bg-brandPrimary text-white shadow-sm'
+                        : 'text-textSecondary hover:text-textPrimary'
+                    }`}
+                  >
+                    <LayoutList className="w-3.5 h-3.5 mr-1" />
+                    Timeline
+                  </button>
+                  <button
+                    onClick={() => setViewMode('table')}
+                    className={`flex items-center px-2.5 py-1 rounded text-xs font-semibold transition-all ${
+                      viewMode === 'table'
+                        ? 'bg-brandPrimary text-white shadow-sm'
+                        : 'text-textSecondary hover:text-textPrimary'
+                    }`}
+                  >
+                    <Columns className="w-3.5 h-3.5 mr-1" />
+                    Table (16 Cols)
+                  </button>
+                </div>
+
+                {/* Per Page Select */}
+                <div className="w-24">
+                  <Select
+                    value={String(historyLimit)}
+                    onChange={(e) => { setHistoryLimit(parseInt(e.target.value, 10)); setHistoryPage(1); }}
+                    options={[
+                      { value: '25', label: '25 / page' },
+                      { value: '50', label: '50 / page' },
+                      { value: '100', label: '100 / page' },
+                      { value: '250', label: '250 / page' },
+                    ]}
+                  />
+                </div>
+
+                {/* Export Button */}
+                <Button
+                  variant="secondary"
+                  onClick={handleExportHistory}
+                  className="text-xs text-textPrimary hover:border-emerald-500/50"
+                >
+                  <FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-400" />
+                  Export XLSX
+                </Button>
+              </div>
+            </div>
+
+            {/* Date Preset Pill Filters & Date Range */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-borderBase pt-2.5 text-xs">
+              <div className="flex items-center space-x-1 flex-wrap gap-y-1">
+                <span className="text-[11px] text-textSecondary mr-1 flex items-center">
+                  <Calendar className="w-3.5 h-3.5 mr-1 text-cyan-400" /> Date Preset:
+                </span>
+                {[
+                  { key: 'ALL_TIME', label: 'All Time' },
+                  { key: 'TODAY', label: 'Today' },
+                  { key: 'LAST_7_DAYS', label: 'Last 7 Days' },
+                  { key: 'LAST_30_DAYS', label: 'Last 30 Days' },
+                  { key: 'LAST_90_DAYS', label: 'Last 90 Days' },
+                  { key: 'THIS_YEAR', label: 'This Year' },
+                ].map((preset) => (
+                  <button
+                    key={preset.key}
+                    onClick={() => { setDatePreset(preset.key); setStartDate(''); setEndDate(''); setHistoryPage(1); }}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                      datePreset === preset.key
+                        ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-semibold'
+                        : 'bg-bgBase border border-borderBase text-textSecondary hover:text-textPrimary'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Date Range */}
+              <div className="flex items-center space-x-2">
+                <span className="text-[11px] text-textSecondary">Custom Range:</span>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => { setStartDate(e.target.value); setDatePreset(''); setHistoryPage(1); }}
+                  className="bg-bgBase border border-borderBase rounded px-2 py-1 text-[11px] text-textPrimary focus:outline-none focus:border-cyan-400"
+                />
+                <span className="text-textSecondary text-[11px]">to</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => { setEndDate(e.target.value); setDatePreset(''); setHistoryPage(1); }}
+                  className="bg-bgBase border border-borderBase rounded px-2 py-1 text-[11px] text-textPrimary focus:outline-none focus:border-cyan-400"
+                />
+                {(startDate || endDate) && (
+                  <button
+                    onClick={() => { setStartDate(''); setEndDate(''); setDatePreset('ALL_TIME'); setHistoryPage(1); }}
+                    className="text-[11px] text-rose-400 hover:underline ml-1"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. History Content: Timeline vs Table */}
           {historyLoading ? (
-            <div className="py-12 text-center text-textSecondary">
-              <div className="inline-block w-6 h-6 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin mb-2"></div>
-              <p className="text-xs">Loading complete asset history...</p>
+            <div className="py-16 text-center text-textSecondary bg-bgElevated border border-borderBase rounded-xl">
+              <div className="inline-block w-8 h-8 border-3 border-cyan-400 border-t-transparent rounded-full animate-spin mb-3"></div>
+              <p className="text-xs font-medium">Querying complete asset history & custody ledger...</p>
             </div>
           ) : historyEvents.length === 0 ? (
-            <div className="p-8 text-center bg-bgElevated border border-borderBase rounded-xl text-textSecondary text-xs">
-              No historical events found matching your search.
-            </div>
-          ) : (
-            <div className="space-y-8">
-              {/* Visual Timeline Section */}
-              <Card
-                title="Historical Chain of Custody Timeline"
-                subtitle="Chronological sequence of device registration, assignments, transfers, and maintenance events."
+            <div className="p-12 text-center bg-bgElevated border border-borderBase rounded-xl text-textSecondary text-xs">
+              <p className="text-sm font-semibold text-textPrimary mb-1">No historical events found</p>
+              <p>No events match the selected action, search keyword, or date range filter.</p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => { setHistoryFilterAction(''); setHistorySearch(''); setDatePreset('ALL_TIME'); setStartDate(''); setEndDate(''); setHistoryPage(1); }}
+                className="mt-3 text-xs"
               >
-                <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-borderBase">
-                  {historyEvents.map((event) => {
-                    const badge = getActionBadge(event.action);
-                    return (
-                      <div key={event.id} className="relative group">
-                        {/* Timeline Marker Dot */}
-                        <div
-                          className={`absolute -left-[27px] sm:-left-[35px] top-1.5 w-3.5 h-3.5 rounded-full border-2 border-bgElevated ${badge.dot} shadow-[0_0_8px_rgba(34,199,214,0.4)]`}
-                        />
+                Reset All Filters
+              </Button>
+            </div>
+          ) : viewMode === 'timeline' ? (
+            /* ══ TIMELINE VIEW ══ */
+            <Card
+              title="Asset Lifecycle Timeline"
+              subtitle="Permanent, chronological chain-of-custody and maintenance events recorded in real PostgreSQL storage."
+            >
+              <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-borderBase">
+                {historyEvents.map((event) => {
+                  const badge = getActionBadge(event.action);
+                  return (
+                    <div key={event.id} className="relative group">
+                      {/* Timeline Marker Dot */}
+                      <div
+                        className={`absolute -left-[27px] sm:-left-[35px] top-2 w-3.5 h-3.5 rounded-full border-2 border-bgElevated ${badge.dot} shadow-[0_0_8px_rgba(6,182,212,0.4)]`}
+                      />
 
-                        {/* Event Card */}
-                        <div className="bg-bgBase border border-borderBase hover:border-[#4D525E] transition-all rounded-xl p-4 space-y-3">
-                          {/* Event Header */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borderBase pb-2">
-                            <div className="flex items-center space-x-2">
-                              <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold uppercase border ${badge.color}`}>
-                                {badge.label}
+                      {/* Event Card */}
+                      <div className="bg-bgBase border border-borderBase hover:border-zinc-600 transition-all rounded-xl p-4 space-y-3">
+                        {/* Header: Action Badge, Date, Actor */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-borderBase pb-2.5">
+                          <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                            <span className={`px-2.5 py-0.5 rounded text-[11px] font-bold uppercase border ${badge.color}`}>
+                              {badge.label}
+                            </span>
+
+                            {event.isCorrection && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-yellow-500/20 text-yellow-400 border border-yellow-500/40">
+                                Correction
                               </span>
-                              <span className="text-xs font-mono text-textPrimary">
-                                {new Date(event.eventDate).toLocaleDateString('en-GB')}
+                            )}
+
+                            {event.relatedRecordCode && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-400 border border-cyan-800">
+                                #{event.relatedRecordCode}
                               </span>
-                              <span className="text-[11px] font-mono text-textSecondary">
-                                {new Date(event.eventDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-textSecondary">
-                              Logged by: <strong className="text-textPrimary">{event.performedBy}</strong>
+                            )}
+
+                            <span className="text-xs font-mono text-textPrimary">
+                              {new Date(event.eventDate).toLocaleDateString('en-GB')}
+                            </span>
+                            <span className="text-[11px] font-mono text-textSecondary">
+                              {new Date(event.eventDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </div>
 
-                          {/* From → To Chain Information */}
-                          {(event.action === 'TRANSFERRED' || event.action === 'ASSIGNED' || event.action === 'RETURNED') && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-bgElevated p-3 rounded-lg border border-borderBase text-xs">
-                              <div>
-                                <span className="text-[10px] text-textSecondary uppercase font-semibold block">FROM</span>
-                                <p className="font-bold text-rose-300 mt-0.5">
-                                  {event.previousHolder || 'IT STOCK'}
-                                </p>
-                                <p className="text-textSecondary text-[11px]">
-                                  Dept: {event.previousDepartment || '—'} | Loc: {event.previousLocation || '—'}
-                                </p>
-                              </div>
-                              <div className="sm:border-l sm:border-borderBase sm:pl-3">
-                                <span className="text-[10px] text-textSecondary uppercase font-semibold block">TO</span>
-                                <p className="font-bold text-emerald-300 mt-0.5">
-                                  {event.newHolder || 'IT STOCK'}
-                                </p>
-                                <p className="text-textSecondary text-[11px]">
-                                  Dept: {event.newDepartment || '—'} | Loc: {event.newLocation || '—'}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Status / Condition Changes */}
-                          {(event.action === 'STATUS_CHANGED' || event.action === 'CONDITION_CHANGED') && (
-                            <div className="bg-bgElevated p-3 rounded-lg border border-borderBase text-xs flex items-center gap-3">
-                              <span className="text-textSecondary">Transition:</span>
-                              <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
-                                {event.previousStatus || event.previousCondition || '—'}
-                              </span>
-                              <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
-                              <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold">
-                                {event.newStatus || event.newCondition || '—'}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Reason & Remarks */}
-                          <div className="text-xs space-y-1">
-                            {event.reason && (
-                              <p className="text-textPrimary">
-                                <strong className="text-textSecondary">Reason:</strong> {event.reason}
-                              </p>
+                          <div className="text-[11px] text-textSecondary">
+                            Recorded by: <strong className="text-textPrimary">{event.performedBy || event.performedByName || 'System'}</strong>
+                            {event.approvedBy && (
+                              <span className="ml-2">| Approved by: <strong className="text-emerald-400">{event.approvedBy}</strong></span>
                             )}
-                            {event.remarks && (
-                              <p className="text-textSecondary text-[11.5px] italic">
-                                "{event.remarks}"
+                          </div>
+                        </div>
+
+                        {/* Correction Alert notice if this event is a correction */}
+                        {event.isCorrection && event.correctionReason && (
+                          <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-300 text-xs">
+                            <strong className="block text-yellow-200 mb-0.5">Administrative Correction Reason:</strong>
+                            {event.correctionReason}
+                          </div>
+                        )}
+
+                        {/* Custody Movement: From → To Box */}
+                        {(event.previousHolder || event.newHolder || event.previousDepartment || event.newDepartment || event.previousLocation || event.newLocation) && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-bgElevated p-3 rounded-lg border border-borderBase text-xs">
+                            <div>
+                              <span className="text-[10px] text-textSecondary uppercase font-semibold block">FROM CUSTODIAN & LOCATION</span>
+                              <p className="font-bold text-rose-300 mt-0.5">
+                                {event.previousHolder || 'IT STOCK'}
                               </p>
+                              <p className="text-textSecondary text-[11px]">
+                                Dept: {event.previousDepartment || '—'} | Loc: {event.previousLocation || '—'}
+                              </p>
+                            </div>
+                            <div className="sm:border-l sm:border-borderBase sm:pl-3">
+                              <span className="text-[10px] text-textSecondary uppercase font-semibold block">TO CUSTODIAN & LOCATION</span>
+                              <p className="font-bold text-emerald-300 mt-0.5">
+                                {event.newHolder || 'IT STOCK'}
+                              </p>
+                              <p className="text-textSecondary text-[11px]">
+                                Dept: {event.newDepartment || '—'} | Loc: {event.newLocation || '—'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Status / Condition Transitions */}
+                        {(event.previousStatus || event.newStatus || event.previousCondition || event.newCondition) && (
+                          <div className="flex flex-wrap items-center gap-4 bg-bgElevated p-2.5 rounded-lg border border-borderBase text-xs">
+                            {event.previousStatus && event.newStatus && event.previousStatus !== event.newStatus && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-textSecondary text-[11px]">Status:</span>
+                                <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px]">
+                                  {event.previousStatus}
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+                                <span className="px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono font-bold text-[10px]">
+                                  {event.newStatus}
+                                </span>
+                              </div>
+                            )}
+
+                            {event.previousCondition && event.newCondition && event.previousCondition !== event.newCondition && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-textSecondary text-[11px]">Condition:</span>
+                                <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono text-[10px]">
+                                  {event.previousCondition}
+                                </span>
+                                <ArrowRight className="w-3.5 h-3.5 text-purple-400" />
+                                <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-mono font-bold text-[10px]">
+                                  {event.newCondition}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Reason & Remarks */}
+                        <div className="text-xs space-y-1">
+                          {event.reason && (
+                            <p className="text-textPrimary">
+                              <strong className="text-textSecondary">Operational Reason:</strong> {event.reason}
+                            </p>
+                          )}
+                          {event.remarks && (
+                            <p className="text-textSecondary text-[11.5px] italic">
+                              "{event.remarks}"
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Card Footer: Detail & Admin Correction Actions */}
+                        <div className="flex items-center justify-between border-t border-borderBase pt-2 text-xs">
+                          <span className="font-mono text-[10px] text-zinc-500">
+                            Event ID: {event.id.slice(0, 12)}...
+                          </span>
+
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => {
+                                setSelectedEventForDetails(event);
+                                setShowEventDetailsModal(true);
+                              }}
+                              className="px-2.5 py-1 rounded text-xs bg-bgElevated border border-borderBase text-cyan-400 hover:border-cyan-500/50 flex items-center font-medium transition-all"
+                            >
+                              <Eye className="w-3.5 h-3.5 mr-1" />
+                              View Comparison
+                            </button>
+
+                            {hasPermission('ASSET_UPDATE') && !event.isCorrection && (
+                              <button
+                                onClick={() => {
+                                  setSelectedEventForCorrection(event);
+                                  setCorrectionForm({ reason: '', remarks: '', newStatus: '', newCondition: '', newHolderId: '' });
+                                  setShowCorrectionModal(true);
+                                }}
+                                className="px-2.5 py-1 rounded text-xs bg-bgElevated border border-borderBase text-amber-400 hover:border-amber-500/50 flex items-center font-medium transition-all"
+                              >
+                                <Edit className="w-3.5 h-3.5 mr-1" />
+                                Admin Correct
+                              </button>
                             )}
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </Card>
-
-              {/* Detailed History Table */}
-              <Card
-                title="Detailed History Ledger"
-                subtitle="Complete audit register with date, timestamp, movement parties, and operational reasoning."
-              >
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse font-sans">
-                    <thead>
-                      <tr className="border-b border-borderBase bg-bgBase text-textSecondary uppercase font-mono text-[10px]">
-                        <th className="py-2.5 px-3">Date & Time</th>
-                        <th className="py-2.5 px-3">Event</th>
-                        <th className="py-2.5 px-3">From</th>
-                        <th className="py-2.5 px-3">To</th>
-                        <th className="py-2.5 px-3">Department</th>
-                        <th className="py-2.5 px-3">Location</th>
-                        <th className="py-2.5 px-3">Status</th>
-                        <th className="py-2.5 px-3">Condition</th>
-                        <th className="py-2.5 px-3">Performed By</th>
-                        <th className="py-2.5 px-3">Reason / Remarks</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-borderBase">
-                      {historyEvents.map((row) => (
-                        <tr key={row.id} className="hover:bg-bgBase/60 transition-colors">
-                          <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-textPrimary">
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          ) : (
+            /* ══ TABLE VIEW (16 COLUMNS, INTERNAL HORIZONTAL SCROLL) ══ */
+            <Card
+              title="16-Column Complete Asset History Ledger"
+              subtitle="Auditable tabular register with internal horizontal scrolling. Columns are strictly structured per ISO ITAM compliance."
+            >
+              <div className="overflow-x-auto border border-borderBase rounded-lg">
+                <table className="min-w-[1550px] w-full text-left text-xs border-collapse font-sans">
+                  <thead>
+                    <tr className="border-b border-borderBase bg-bgBase text-textSecondary uppercase font-mono text-[10px]">
+                      <th className="py-2.5 px-3 whitespace-nowrap sticky left-0 bg-bgBase z-10">1. Date & Time</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">2. Event Type</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap min-w-[200px]">3. Description / Reason</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">4. From Employee</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">5. To Employee</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">6. From Department</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">7. To Department</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">8. From Location</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">9. To Location</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">10. Previous Status</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">11. New Status</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">12. Previous Condition</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">13. New Condition</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">14. Performed By</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">15. Related Record</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap text-right sticky right-0 bg-bgBase z-10">16. Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-borderBase">
+                    {historyEvents.map((row) => {
+                      const badge = getActionBadge(row.action);
+                      return (
+                        <tr key={row.id} className="hover:bg-bgBase/70 transition-colors">
+                          {/* 1. Date & Time */}
+                          <td className="py-2 px-3 font-mono text-[11px] whitespace-nowrap text-textPrimary sticky left-0 bg-bgElevated z-10">
                             {new Date(row.eventDate).toLocaleDateString('en-GB')}{' '}
                             <span className="text-textSecondary">
                               {new Date(row.eventDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           </td>
+
+                          {/* 2. Event Type */}
                           <td className="py-2 px-3 whitespace-nowrap">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-bgElevated border border-borderBase text-cyan-400">
-                              {row.action}
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badge.color}`}>
+                              {badge.label}
                             </span>
+                            {row.isCorrection && (
+                              <span className="ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-yellow-500/20 text-yellow-400">
+                                CORR
+                              </span>
+                            )}
                           </td>
+
+                          {/* 3. Description / Reason */}
+                          <td className="py-2 px-3 text-textPrimary text-[11px] max-w-xs truncate" title={row.reason || row.remarks || ''}>
+                            {row.reason || row.remarks || '—'}
+                          </td>
+
+                          {/* 4. From Employee */}
                           <td className="py-2 px-3 text-rose-300 font-medium whitespace-nowrap">
                             {row.previousHolder || '—'}
                           </td>
+
+                          {/* 5. To Employee */}
                           <td className="py-2 px-3 text-emerald-300 font-medium whitespace-nowrap">
                             {row.newHolder || '—'}
                           </td>
+
+                          {/* 6. From Dept */}
                           <td className="py-2 px-3 text-textSecondary whitespace-nowrap">
-                            {row.newDepartment && row.newDepartment !== '—'
-                              ? row.newDepartment
-                              : row.previousDepartment || '—'}
+                            {row.previousDepartment || '—'}
                           </td>
+
+                          {/* 7. To Dept */}
                           <td className="py-2 px-3 text-textSecondary whitespace-nowrap">
-                            {row.newLocation && row.newLocation !== '—'
-                              ? row.newLocation
-                              : row.previousLocation || '—'}
+                            {row.newDepartment || '—'}
                           </td>
-                          <td className="py-2 px-3 font-mono text-[10px] text-textPrimary whitespace-nowrap">
-                            {row.newStatus || row.previousStatus || '—'}
-                          </td>
+
+                          {/* 8. From Loc */}
                           <td className="py-2 px-3 text-textSecondary whitespace-nowrap">
-                            {row.newCondition || row.previousCondition || '—'}
+                            {row.previousLocation || '—'}
                           </td>
+
+                          {/* 9. To Loc */}
+                          <td className="py-2 px-3 text-textSecondary whitespace-nowrap">
+                            {row.newLocation || '—'}
+                          </td>
+
+                          {/* 10. Previous Status */}
+                          <td className="py-2 px-3 font-mono text-[10px] text-zinc-400 whitespace-nowrap">
+                            {row.previousStatus || '—'}
+                          </td>
+
+                          {/* 11. New Status */}
+                          <td className="py-2 px-3 font-mono text-[10px] text-cyan-300 font-semibold whitespace-nowrap">
+                            {row.newStatus || '—'}
+                          </td>
+
+                          {/* 12. Previous Condition */}
+                          <td className="py-2 px-3 font-mono text-[10px] text-zinc-400 whitespace-nowrap">
+                            {row.previousCondition || '—'}
+                          </td>
+
+                          {/* 13. New Condition */}
+                          <td className="py-2 px-3 font-mono text-[10px] text-purple-300 font-semibold whitespace-nowrap">
+                            {row.newCondition || '—'}
+                          </td>
+
+                          {/* 14. Performed By */}
                           <td className="py-2 px-3 text-textSecondary whitespace-nowrap font-medium">
-                            {row.performedBy}
+                            {row.performedBy || row.performedByName || 'System'}
                           </td>
-                          <td className="py-2 px-3 text-textSecondary text-[11px] max-w-xs truncate" title={row.reason || row.remarks || ''}>
-                            {row.reason || row.remarks || '—'}
+
+                          {/* 15. Related Record */}
+                          <td className="py-2 px-3 whitespace-nowrap">
+                            {row.relatedRecordCode ? (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-400 border border-cyan-800">
+                                {row.relatedRecordCode}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-600">—</span>
+                            )}
+                          </td>
+
+                          {/* 16. Actions */}
+                          <td className="py-2 px-3 whitespace-nowrap text-right sticky right-0 bg-bgElevated z-10">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <button
+                                onClick={() => {
+                                  setSelectedEventForDetails(row);
+                                  setShowEventDetailsModal(true);
+                                }}
+                                title="View Event Comparison Details"
+                                className="p-1 rounded bg-bgBase hover:bg-cyan-950 text-cyan-400 border border-borderBase"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              {hasPermission('ASSET_UPDATE') && !row.isCorrection && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedEventForCorrection(row);
+                                    setCorrectionForm({ reason: '', remarks: '', newStatus: '', newCondition: '', newHolderId: '' });
+                                    setShowCorrectionModal(true);
+                                  }}
+                                  title="Record Admin Correction"
+                                  className="p-1 rounded bg-bgBase hover:bg-amber-950 text-amber-400 border border-borderBase"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* 4. Server Pagination Bar */}
+          {historyTotalCount > 0 && (
+            <div className="bg-bgElevated border border-borderBase rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="text-textSecondary">
+                Showing{' '}
+                <strong className="text-textPrimary font-mono">
+                  {(historyPage - 1) * historyLimit + 1}
+                </strong>{' '}
+                to{' '}
+                <strong className="text-textPrimary font-mono">
+                  {Math.min(historyPage * historyLimit, historyTotalCount)}
+                </strong>{' '}
+                of <strong className="text-textPrimary font-mono">{historyTotalCount}</strong> recorded events
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
+                  disabled={historyPage <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-borderBase bg-bgBase text-textPrimary hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center text-xs"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                  Previous
+                </button>
+
+                <span className="text-xs font-mono text-textSecondary px-2">
+                  Page <strong className="text-cyan-400">{historyPage}</strong> of{' '}
+                  <strong className="text-textPrimary">{historyTotalPages}</strong>
+                </span>
+
+                <button
+                  onClick={() => setHistoryPage((p) => Math.min(historyTotalPages, p + 1))}
+                  disabled={historyPage >= historyTotalPages}
+                  className="px-3 py-1.5 rounded-lg border border-borderBase bg-bgBase text-textPrimary hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center text-xs"
+                >
+                  Next
+                  <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                </button>
+              </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ TAB 3: WARRANTY & SERVICE CONTRACTS ══ */}
+      {activeTab === 'warranty' && (
+        <div className="space-y-6">
+          {assetWarranties.length === 0 ? (
+            <div className="p-12 text-center bg-[#0E131F] border border-[#1E2535] rounded-xl">
+              <ShieldCheck className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+              <h3 className="text-base font-bold text-white mb-1">No Warranty Contracts Found</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto mb-4">
+                This asset does not currently have any active or historical warranty contracts registered.
+              </p>
+              <Button variant="primary" onClick={() => navigate('/warranties')}>
+                <Plus className="w-4 h-4 mr-1.5" />
+                Register Warranty Contract
+              </Button>
+            </div>
+          ) : (
+            assetWarranties.map((w, idx) => (
+              <div key={w.id} className="bg-[#0E131F] border border-[#1E2535] rounded-xl p-5 space-y-4">
+                <div className="flex flex-wrap items-center justify-between pb-3 border-b border-[#1E2535] gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className="px-2.5 py-1 rounded bg-indigo-500/20 text-indigo-300 font-mono font-bold text-xs">
+                      {w.warrantyCode}
+                    </span>
+                    <span className="text-sm font-bold text-white">{w.provider}</span>
+                    <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono text-[10px]">
+                      {w.warrantyType}
+                    </span>
+                    {idx === 0 && (
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                        CURRENT CONTRACT
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={w.computedStatus || w.status} />
+                    <Button variant="outline" size="sm" onClick={() => navigate('/warranties')}>
+                      Manage in Warranty Center &rarr;
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-mono">Policy / Contract #</span>
+                    <span className="text-slate-200 font-mono font-bold">{w.policyNumber || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-mono">Start Date</span>
+                    <span className="text-slate-200 font-mono">{new Date(w.startDate).toLocaleDateString('en-GB')}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-mono">End Date</span>
+                    <span className="text-slate-200 font-mono">{new Date(w.endDate).toLocaleDateString('en-GB')}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[10px] uppercase font-mono">Days Remaining</span>
+                    <span className="text-amber-400 font-mono font-bold">
+                      {w.daysRemaining !== undefined ? (w.daysRemaining < 0 ? `Expired (${Math.abs(w.daysRemaining)}d ago)` : `${w.daysRemaining} days`) : '—'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-[#121624] border border-[#1E2535] rounded-lg text-xs space-y-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block">Coverage Description</span>
+                  <p className="text-slate-300">{w.coverageDescription || 'Standard OEM parts & labor coverage.'}</p>
+                </div>
+
+                {w.claimContact && (
+                  <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 pt-1">
+                    <span>Contact: <strong className="text-slate-200">{w.claimContact}</strong></span>
+                    {w.contactEmail && <span>Email: <strong className="text-indigo-400 font-mono">{w.contactEmail}</strong></span>}
+                    {w.contactPhone && <span>Phone: <strong className="text-slate-200 font-mono">{w.contactPhone}</strong></span>}
+                  </div>
+                )}
+              </div>
+            ))
           )}
         </div>
       )}
@@ -1313,6 +2073,262 @@ export const AssetDetail: React.FC = () => {
               </Button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {/* ══ EVENT DETAILS & STATE COMPARISON MODAL ══ */}
+      {showEventDetailsModal && selectedEventForDetails && (
+        <Modal
+          isOpen={showEventDetailsModal}
+          onClose={() => { setShowEventDetailsModal(false); setSelectedEventForDetails(null); }}
+          title={`Audit Inspection: Event #${selectedEventForDetails.id.slice(0, 8)}`}
+          subtitle="Immutable historical state transition record from PostgreSQL."
+          maxWidth="xl"
+        >
+          <div className="space-y-5 text-xs font-sans">
+            {/* Top Event Metadata Header */}
+            <div className="p-3.5 rounded-xl bg-bgBase border border-borderBase flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                {(() => {
+                  const b = getActionBadge(selectedEventForDetails.action);
+                  return (
+                    <span className={`px-2.5 py-0.5 rounded text-xs font-bold uppercase border ${b.color}`}>
+                      {b.label}
+                    </span>
+                  );
+                })()}
+
+                {selectedEventForDetails.isCorrection && (
+                  <span className="px-2 py-0.5 rounded text-xs font-bold uppercase bg-yellow-500/20 text-yellow-400 border border-yellow-500/40">
+                    Correction Entry
+                  </span>
+                )}
+
+                {selectedEventForDetails.relatedRecordCode && (
+                  <span className="px-2 py-0.5 rounded text-xs font-mono bg-cyan-950/60 text-cyan-400 border border-cyan-800">
+                    Record: #{selectedEventForDetails.relatedRecordCode}
+                  </span>
+                )}
+              </div>
+
+              <div className="text-right text-[11px] font-mono text-textSecondary">
+                <span>{new Date(selectedEventForDetails.eventDate).toLocaleDateString('en-GB')}</span>{' '}
+                <span className="text-textPrimary font-bold">
+                  {new Date(selectedEventForDetails.eventDate).toLocaleTimeString('en-GB')}
+                </span>
+              </div>
+            </div>
+
+            {/* Correction Explanation Banner */}
+            {selectedEventForDetails.isCorrection && (
+              <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-300">
+                <strong className="block text-yellow-200 mb-0.5 font-semibold">Administrative Correction Notice:</strong>
+                <p className="text-xs">{selectedEventForDetails.correctionReason || 'Administrative adjustment recorded.'}</p>
+                {selectedEventForDetails.correctedHistoryId && (
+                  <p className="text-[10px] font-mono text-yellow-400/80 mt-1">
+                    Linked to Original Event: {selectedEventForDetails.correctedHistoryId}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Before vs After Comparison Grid */}
+            <div className="border border-borderBase rounded-xl overflow-hidden">
+              <div className="bg-bgElevated p-2.5 border-b border-borderBase font-semibold text-textPrimary flex items-center justify-between">
+                <span className="uppercase text-[10px] tracking-wider text-cyan-400 font-bold">
+                  Asset State Transition (Before vs After)
+                </span>
+                <span className="text-[10px] text-textSecondary font-mono">Real-Time Audit Diff</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-borderBase bg-bgBase">
+                {/* BEFORE STATE */}
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center space-x-1.5 text-rose-400 font-bold text-[11px] uppercase border-b border-borderBase pb-1.5">
+                    <span>State Before Event</span>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Custodian:</span>
+                      <span className="font-semibold text-rose-300">{selectedEventForDetails.previousHolder || 'IT STOCK'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Department:</span>
+                      <span className="text-textPrimary">{selectedEventForDetails.previousDepartment || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Location:</span>
+                      <span className="text-textPrimary">{selectedEventForDetails.previousLocation || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Status:</span>
+                      <span className="font-mono text-zinc-400">{selectedEventForDetails.previousStatus || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Allocation:</span>
+                      <span className="font-mono text-zinc-400">{selectedEventForDetails.previousAllocationStatus || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Condition:</span>
+                      <span className="font-mono text-zinc-400">{selectedEventForDetails.previousCondition || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AFTER STATE */}
+                <div className="p-4 space-y-3 bg-bgElevated/30">
+                  <div className="flex items-center space-x-1.5 text-emerald-400 font-bold text-[11px] uppercase border-b border-borderBase pb-1.5">
+                    <span>State After Event</span>
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Custodian:</span>
+                      <span className="font-semibold text-emerald-300">{selectedEventForDetails.newHolder || 'IT STOCK'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Department:</span>
+                      <span className="text-textPrimary">{selectedEventForDetails.newDepartment || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Location:</span>
+                      <span className="text-textPrimary">{selectedEventForDetails.newLocation || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Status:</span>
+                      <span className="font-mono text-cyan-300 font-semibold">{selectedEventForDetails.newStatus || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Allocation:</span>
+                      <span className="font-mono text-cyan-300 font-semibold">{selectedEventForDetails.newAllocationStatus || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-textSecondary">Condition:</span>
+                      <span className="font-mono text-purple-300 font-semibold">{selectedEventForDetails.newCondition || '—'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Operational Reason & Remarks */}
+            <div className="p-3.5 rounded-xl bg-bgBase border border-borderBase space-y-2">
+              <div>
+                <span className="text-[10px] text-textSecondary uppercase font-semibold block">Operational Reason</span>
+                <p className="text-textPrimary mt-0.5">{selectedEventForDetails.reason || 'None specified.'}</p>
+              </div>
+              <div className="border-t border-borderBase pt-2">
+                <span className="text-[10px] text-textSecondary uppercase font-semibold block">Audit Remarks</span>
+                <p className="text-textSecondary italic mt-0.5">"{selectedEventForDetails.remarks || 'Standard automated lifecycle logging.'}"</p>
+              </div>
+            </div>
+
+            {/* Personnel Accountability */}
+            <div className="grid grid-cols-2 gap-3 p-3 bg-bgElevated rounded-lg border border-borderBase text-[11px]">
+              <div>
+                <span className="text-textSecondary uppercase block text-[10px]">Actor / Performed By</span>
+                <span className="font-bold text-textPrimary">
+                  {selectedEventForDetails.performedBy || selectedEventForDetails.performedByName || 'System'}
+                </span>
+              </div>
+              <div>
+                <span className="text-textSecondary uppercase block text-[10px]">Approver</span>
+                <span className="font-bold text-textPrimary">
+                  {selectedEventForDetails.approvedBy || selectedEventForDetails.approvedByName || 'Not Required / System'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end pt-2 border-t border-borderBase">
+              <Button variant="secondary" onClick={() => { setShowEventDetailsModal(false); setSelectedEventForDetails(null); }}>
+                Close Inspection
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ══ ADMIN CORRECTION MODAL ══ */}
+      {showCorrectionModal && selectedEventForCorrection && (
+        <Modal
+          isOpen={showCorrectionModal}
+          onClose={() => { setShowCorrectionModal(false); setSelectedEventForCorrection(null); }}
+          title={`Administrative Correction: Event #${selectedEventForCorrection.id.slice(0, 8)}`}
+          subtitle="Audit-compliant correction workflow. The original historical event will remain immutable and preserved."
+          maxWidth="md"
+        >
+          <form onSubmit={handleCorrectionSubmit} className="space-y-4 text-xs font-sans">
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300">
+              <p className="font-semibold text-xs text-white mb-0.5">
+                Target Event: {selectedEventForCorrection.action} ({new Date(selectedEventForCorrection.eventDate).toLocaleDateString('en-GB')})
+              </p>
+              <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                Per Section 27, historical entries cannot be silently edited or deleted. Submitting this form appends a verified <strong className="text-white">CORRECTION_RECORDED</strong> entry linked to this record and logs an audit log entry.
+              </p>
+            </div>
+
+            <Input
+              label="Correction Justification / Reason (Mandatory)"
+              value={correctionForm.reason}
+              onChange={(e) => setCorrectionForm({ ...correctionForm, reason: e.target.value })}
+              placeholder="e.g. Correcting holder designation per IT audit review"
+              required
+            />
+
+            <Input
+              label="Additional Correction Remarks (Optional)"
+              value={correctionForm.remarks}
+              onChange={(e) => setCorrectionForm({ ...correctionForm, remarks: e.target.value })}
+              placeholder="e.g. Verified with HR documentation #HR-9821"
+            />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="Corrected Status (Optional)"
+                value={correctionForm.newStatus}
+                onChange={(e) => setCorrectionForm({ ...correctionForm, newStatus: e.target.value })}
+                options={[
+                  { value: '', label: '-- Keep Current --' },
+                  { value: 'AVAILABLE', label: 'AVAILABLE' },
+                  { value: 'IN_USE', label: 'IN_USE' },
+                  { value: 'UNDER_REPAIR', label: 'UNDER_REPAIR' },
+                  { value: 'RETIRED', label: 'RETIRED' },
+                  { value: 'DAMAGED', label: 'DAMAGED' },
+                ]}
+              />
+
+              <Select
+                label="Corrected Condition (Optional)"
+                value={correctionForm.newCondition}
+                onChange={(e) => setCorrectionForm({ ...correctionForm, newCondition: e.target.value })}
+                options={[
+                  { value: '', label: '-- Keep Current --' },
+                  { value: 'EXCELLENT', label: 'EXCELLENT' },
+                  { value: 'GOOD', label: 'GOOD' },
+                  { value: 'FAIR', label: 'FAIR' },
+                  { value: 'DAMAGED', label: 'DAMAGED' },
+                  { value: 'CRITICAL', label: 'CRITICAL' },
+                ]}
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-borderBase">
+              <Button
+                variant="secondary"
+                type="button"
+                onClick={() => { setShowCorrectionModal(false); setSelectedEventForCorrection(null); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                loading={correctionLoading}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+              >
+                Record Administrative Correction
+              </Button>
+            </div>
+          </form>
         </Modal>
       )}
     </div>

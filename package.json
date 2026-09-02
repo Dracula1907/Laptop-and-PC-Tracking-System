@@ -1,0 +1,13 @@
+{
+  "name": "laptop-tracking-system",
+  "version": "1.0.0",
+  "description": "Laptop & IT Asset Tracking Management System (ITAM)",
+  "private": true,
+  "scripts": {
+    "start": "node start.js",
+    "dev": "node start.js",
+    "db": "node backend/scripts/start-db.js",
+    "backend": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend run dev"
+  }
+}

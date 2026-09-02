@@ -1,5 +1,5 @@
 import prisma from '../config/prisma';
-import { AssetStatus, AssetCondition, WorkflowStatus, MaintenanceStatus, AssetAction, AllocationStatus, Prisma } from '@prisma/client';
+import { AssetStatus, AssetCondition, WorkflowStatus, MaintenanceStatus, AssetAction, AllocationStatus, DataQualityStatus, AssetType, Prisma } from '@prisma/client';
 import {
   AssetCreateSchema,
   AssetUpdateSchema,
@@ -10,6 +10,8 @@ import {
   MaintenanceCreateSchema,
 } from '../validators/schemas';
 import { HistoryService } from './history.service';
+import { TransferService } from './transfer.service';
+import { ReturnService } from './return.service';
 
 export class AssetService {
   // Helper for generating sequential asset codes AST-000001
@@ -63,6 +65,86 @@ export class AssetService {
     }
   }
 
+  // Automated Data Quality Evaluator based on live asset fields
+  public static evaluateDataQuality(
+    assetData: {
+      companyAssetId?: string | null;
+      assetCode?: string | null;
+      assetName?: string | null;
+      model?: string | null;
+      assetType?: string | null;
+      status?: string | null;
+      allocationStatus?: string | null;
+      currentHolderId?: string | null;
+      employeeNameSource?: string | null;
+      holderDisplayName?: string | null;
+      serialNumber?: string | null;
+      cpu?: string | null;
+      ram?: string | null;
+      lanIp?: string | null;
+      location?: string | null;
+      departmentId?: string | null;
+    },
+    specifications?: any
+  ): { status: DataQualityStatus; issues: string[] } {
+    const issues: string[] = [];
+
+    const assetId = assetData.companyAssetId || assetData.assetCode;
+    const name = assetData.assetName || assetData.model;
+    const isAllocated =
+      assetData.allocationStatus === 'ALLOCATED' ||
+      assetData.status === 'ASSIGNED' ||
+      assetData.status === 'IN_USE';
+    const holder = assetData.currentHolderId || assetData.employeeNameSource || assetData.holderDisplayName;
+
+    // Critical issues -> NEEDS_REVIEW
+    if (!assetId || !assetId.trim()) issues.push('Missing Asset ID');
+    if (!name || !name.trim()) issues.push('Missing Asset Name');
+    if (isAllocated && (!holder || !holder.trim())) {
+      issues.push('Allocated without assigned employee');
+    }
+
+    // Warnings -> WARNING
+    if (!assetData.serialNumber || !assetData.serialNumber.trim()) {
+      issues.push('Missing Serial Number');
+    }
+
+    const isComputeDevice =
+      !assetData.assetType ||
+      ['LAPTOP', 'DESKTOP', 'WORKSTATION', 'SERVER'].includes(String(assetData.assetType).toUpperCase());
+
+    const cpu = assetData.cpu || specifications?.processor;
+    const ram = assetData.ram || specifications?.ram;
+    const lanIp = assetData.lanIp || specifications?.ipAddress;
+
+    if (isComputeDevice && (!cpu || !cpu.trim())) {
+      issues.push('Missing CPU');
+    }
+    if (isComputeDevice && (!ram || !ram.trim())) {
+      issues.push('Missing RAM');
+    }
+    if (isComputeDevice && (!lanIp || !lanIp.trim())) {
+      issues.push('Missing LAN IP');
+    }
+    if (!assetData.location && !assetData.departmentId) {
+      issues.push('Missing Location or Department');
+    }
+
+    let status: DataQualityStatus = DataQualityStatus.CLEAN;
+    const hasCritical =
+      !assetId ||
+      !name ||
+      (isAllocated && (!holder || !holder.trim()));
+
+    if (hasCritical) {
+      status = DataQualityStatus.NEEDS_REVIEW;
+    } else if (issues.length > 0) {
+      status = DataQualityStatus.WARNING;
+    }
+
+    return { status, issues };
+  }
+
   static async getAssets(query: {
     page?: number;
     limit?: number;
@@ -72,6 +154,7 @@ export class AssetService {
     condition?: string;
     departmentId?: string;
     locationId?: string;
+    location?: string;
     employeeId?: string;
     allocationStatus?: string;
     criticality?: string;
@@ -101,6 +184,7 @@ export class AssetService {
     if (query.holderType) where.holderType = query.holderType as any;
     if (query.sourceAssetStatus) where.sourceAssetStatus = { equals: query.sourceAssetStatus, mode: 'insensitive' };
 
+    // Dynamic Department / Area filter
     const deptFilter = query.department || query.departmentOrArea;
     if (deptFilter && deptFilter.trim()) {
       const d = deptFilter.trim();
@@ -116,9 +200,27 @@ export class AssetService {
       ];
     }
 
+    // Dynamic Location filter
+    if (query.location && query.location.trim()) {
+      const loc = query.location.trim();
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        {
+          OR: [
+            { location: { equals: loc, mode: 'insensitive' } },
+            { locationRel: { name: { equals: loc, mode: 'insensitive' } } },
+            { locationId: loc },
+          ],
+        },
+      ];
+    }
+
+    // Comprehensive Server-backed Search
     if (query.search && query.search.trim()) {
       const s = query.search.trim();
       const sNormalized = s.replace(/\s+/g, '');
+      const isEnumAssetType = Object.values(AssetType).includes(s.toUpperCase() as any);
+
       where.OR = [
         { companyAssetId: { contains: s, mode: 'insensitive' } },
         { companyAssetId: { contains: sNormalized, mode: 'insensitive' } },
@@ -139,10 +241,14 @@ export class AssetService {
         { location: { contains: s, mode: 'insensitive' } },
         { department: { name: { contains: s, mode: 'insensitive' } } },
         { cpu: { contains: s, mode: 'insensitive' } },
+        { ram: { contains: s, mode: 'insensitive' } },
         { lanIp: { contains: s, mode: 'insensitive' } },
         { lanMacAddress: { contains: s, mode: 'insensitive' } },
+        { sourceAssetType: { contains: s, mode: 'insensitive' } },
         { specifications: { processor: { contains: s, mode: 'insensitive' } } },
+        { specifications: { ram: { contains: s, mode: 'insensitive' } } },
         { specifications: { ipAddress: { contains: s, mode: 'insensitive' } } },
+        ...(isEnumAssetType ? [{ assetType: s.toUpperCase() as AssetType }] : []),
       ];
     }
 
@@ -167,25 +273,39 @@ export class AssetService {
           orderBy = [{ sourceAssetStatus: { sort: order, nulls: 'last' } }, { status: order }];
           break;
         case 'allocationStatus':
+        case 'allocation':
           orderBy = { allocationStatus: order };
           break;
         case 'criticality':
           orderBy = { criticality: { sort: order, nulls: 'last' } };
           break;
         case 'location':
-        case 'department':
           orderBy = { location: { sort: order, nulls: 'last' } };
+          break;
+        case 'department':
+          orderBy = { department: { name: order } };
           break;
         case 'employeeName':
         case 'employeeNameSource':
         case 'holder':
+        case 'currentHolder':
           orderBy = { employeeNameSource: { sort: order, nulls: 'last' } };
           break;
         case 'cpu':
           orderBy = { cpu: { sort: order, nulls: 'last' } };
           break;
+        case 'ram':
+          orderBy = { ram: { sort: order, nulls: 'last' } };
+          break;
+        case 'lanIp':
+          orderBy = { lanIp: { sort: order, nulls: 'last' } };
+          break;
         case 'serialNumber':
           orderBy = { serialNumber: { sort: order, nulls: 'last' } };
+          break;
+        case 'dataQuality':
+        case 'dataQualityStatus':
+          orderBy = { dataQualityStatus: { sort: order, nulls: 'last' } };
           break;
         case 'createdAt':
           orderBy = { createdAt: order };
@@ -221,6 +341,77 @@ export class AssetService {
         limit,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  // Dynamic distinct locations from actual database records
+  static async getDistinctLocations(): Promise<string[]> {
+    const [locations, orgLocations] = await Promise.all([
+      prisma.asset.findMany({
+        select: { location: true },
+        distinct: ['location'],
+      }),
+      prisma.location.findMany({
+        select: { name: true },
+      }),
+    ]);
+
+    const set = new Set<string>();
+    locations.forEach((l) => {
+      if (l.location && l.location.trim()) set.add(l.location.trim());
+    });
+    orgLocations.forEach((ol) => {
+      if (ol.name && ol.name.trim()) set.add(ol.name.trim());
+    });
+
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  // Live Inventory Telemetry directly from PostgreSQL
+  static async getInventoryCounts() {
+    const [total, active, allocated, available, underRepair, dataQualityAlerts] = await Promise.all([
+      prisma.asset.count(),
+      prisma.asset.count({
+        where: {
+          OR: [
+            { sourceAssetStatus: { equals: 'Active', mode: 'insensitive' } },
+            { status: { in: [AssetStatus.IN_USE, AssetStatus.ASSIGNED, AssetStatus.AVAILABLE] } },
+          ],
+        },
+      }),
+      prisma.asset.count({
+        where: {
+          OR: [
+            { allocationStatus: AllocationStatus.ALLOCATED },
+            { sourceAllocationStatus: { equals: 'Allocated', mode: 'insensitive' } },
+          ],
+        },
+      }),
+      prisma.asset.count({
+        where: {
+          AND: [
+            { status: AssetStatus.AVAILABLE },
+            { allocationStatus: AllocationStatus.NOT_ALLOCATED },
+          ],
+        },
+      }),
+      prisma.asset.count({
+        where: { status: AssetStatus.UNDER_REPAIR },
+      }),
+      prisma.asset.count({
+        where: {
+          dataQualityStatus: { in: [DataQualityStatus.WARNING, DataQualityStatus.NEEDS_REVIEW] },
+        },
+      }),
+    ]);
+
+    return {
+      total,
+      active,
+      allocated,
+      available,
+      underRepair,
+      dataQualityAlerts,
     };
   }
 
@@ -312,6 +503,7 @@ export class AssetService {
 
     const assetCode = companyAssetId;
     const { specifications, ...assetData } = validated;
+    const quality = AssetService.evaluateDataQuality({ ...assetData, companyAssetId, assetCode }, specifications);
 
     const newAsset = await prisma.$transaction(async (tx) => {
       const asset = await tx.asset.create({
@@ -320,6 +512,8 @@ export class AssetService {
           companyAssetId,
           assetCode,
           sourceAssetId: companyAssetId,
+          dataQualityStatus: quality.status,
+          dataQualityIssues: JSON.stringify(quality.issues),
           specifications: specifications
             ? {
                 create: specifications,
@@ -384,11 +578,18 @@ export class AssetService {
       AssetService.validateStatusTransition(existing.status, assetData.status);
     }
 
+    const updatedQuality = AssetService.evaluateDataQuality(
+      { ...existing, ...assetData, companyAssetId: existing.companyAssetId, assetCode: existing.assetCode },
+      specifications || existing.specifications
+    );
+
     const updated = await prisma.$transaction(async (tx) => {
       const asset = await tx.asset.update({
         where: { id },
         data: {
           ...assetData,
+          dataQualityStatus: updatedQuality.status,
+          dataQualityIssues: JSON.stringify(updatedQuality.issues),
           specifications: specifications
             ? {
                 upsert: {
@@ -479,7 +680,7 @@ export class AssetService {
     Object.keys(newHardware).forEach((k) => {
       const key = k as keyof typeof newHardware;
       if (newHardware[key] !== oldHardware[key]) {
-        changedFields.push(`${key.toUpperCase()}: ${oldHardware[key] || '—'} → ${newHardware[key] || '—'}`);
+        changedFields.push(`${key.toUpperCase()}: ${oldHardware[key] || 'None'} -> ${newHardware[key] || 'None'}`);
       }
     });
 
@@ -537,10 +738,13 @@ export class AssetService {
 
         await HistoryService.recordEvent(tx, {
           assetId: id,
-          action: AssetAction.STATUS_CHANGED,
+          action: AssetAction.HARDWARE_CHANGED,
+          previousStatus: existing.status,
           newStatus: existing.status,
+          previousCondition: existing.condition,
           newCondition: existing.condition,
           performedById: userId,
+          relatedEntityType: 'Hardware',
           eventDate: new Date(),
           remarks: `Hardware Configuration Updated: ${changeSummary}${reason ? ` (Reason: ${reason})` : ''}`,
         });
@@ -644,6 +848,69 @@ export class AssetService {
     });
   }
 
+  // Explicit safe deactivation/retirement without destroying historical references
+  static async deactivateAsset(id: string, userId: string) {
+    const existing = await prisma.asset.findUnique({
+      where: { id },
+      include: {
+        currentHolder: true,
+        department: true,
+      },
+    });
+
+    if (!existing) throw new Error('Asset not found');
+
+    return await prisma.$transaction(async (tx) => {
+      const updated = await tx.asset.update({
+        where: { id },
+        data: {
+          status: AssetStatus.RETIRED,
+          sourceAssetStatus: 'Inactive',
+          allocationStatus: AllocationStatus.NOT_ALLOCATED,
+          sourceAllocationStatus: 'Not Allocated',
+          currentHolderId: null,
+          employeeNameSource: null,
+          notes: (existing.notes ? existing.notes + ' | ' : '') + 'Safely deactivated/retired by Admin.',
+        },
+      });
+
+      await HistoryService.recordEvent(tx, {
+        assetId: id,
+        action: AssetAction.ASSET_DEACTIVATED,
+        previousStatus: existing.status,
+        newStatus: AssetStatus.RETIRED,
+        performedById: userId,
+        relatedEntityType: 'Asset',
+        remarks: 'Asset safely retired and deactivated from active inventory.',
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId,
+          action: 'ASSET_DEACTIVATE',
+          entityType: 'Asset',
+          entityId: id,
+          oldValue: JSON.stringify({
+            status: existing.status,
+            allocationStatus: existing.allocationStatus,
+            holder: existing.currentHolder?.fullName || existing.employeeNameSource,
+          }),
+          newValue: JSON.stringify({
+            status: AssetStatus.RETIRED,
+            allocationStatus: AllocationStatus.NOT_ALLOCATED,
+          }),
+        },
+      });
+
+      return {
+        id,
+        action: 'DEACTIVATED',
+        asset: updated,
+        message: `Asset ${existing.companyAssetId || existing.assetCode} has been safely retired from active inventory.`,
+      };
+    });
+  }
+
   static async assignAsset(assetId: string, data: unknown, userId: string) {
     const asset = await prisma.asset.findUnique({ where: { id: assetId } });
     if (!asset) throw new Error('Asset not found');
@@ -661,8 +928,18 @@ export class AssetService {
     const validated = AssetAssignmentSchema.parse(data);
 
     const employee = await prisma.employee.findUnique({ where: { id: validated.employeeId } });
-    if (!employee || employee.status !== 'ACTIVE') {
-      throw new Error('Employee not found or is currently inactive.');
+    if (!employee) throw new Error('Employee not found.');
+    if (employee.status !== 'ACTIVE') {
+      throw new Error('This employee is not eligible for new asset assignment.');
+    }
+
+    if (employee.departmentId) {
+      const dept = await prisma.department.findUnique({ where: { id: employee.departmentId } });
+      if (!dept || !dept.isActive) throw new Error('Cannot assign asset to an inactive department.');
+    }
+    if (employee.locationId) {
+      const loc = await prisma.location.findUnique({ where: { id: employee.locationId } });
+      if (!loc || !loc.isActive) throw new Error('Cannot assign asset to an inactive location.');
     }
 
     return await prisma.$transaction(async (tx) => {
@@ -733,163 +1010,11 @@ export class AssetService {
   }
 
   static async transferAsset(assetId: string, data: unknown, userId: string) {
-    const asset = await prisma.asset.findUnique({ where: { id: assetId } });
-    if (!asset) throw new Error('Asset not found');
-
-    const validated = AssetTransferSchema.parse(data);
-
-    const newHolder = await prisma.employee.findUnique({ where: { id: validated.newHolderId } });
-    if (!newHolder || newHolder.status !== 'ACTIVE') {
-      throw new Error('Target transfer employee not found or inactive.');
-    }
-
-    return await prisma.$transaction(async (tx) => {
-      const transfer = await tx.assetTransfer.create({
-        data: {
-          assetId,
-          previousHolderId: asset.currentHolderId,
-          newHolderId: validated.newHolderId,
-          previousDepartmentId: asset.departmentId,
-          newDepartmentId: validated.newDepartmentId || newHolder.departmentId,
-          previousLocationId: asset.locationId,
-          newLocationId: validated.newLocationId || newHolder.locationId,
-          requestedById: userId,
-          transferDate: new Date(),
-          reason: validated.reason,
-          remarks: validated.remarks,
-          status: WorkflowStatus.COMPLETED,
-        },
-      });
-
-      await tx.asset.update({
-        where: { id: assetId },
-        data: {
-          currentHolderId: validated.newHolderId,
-          departmentId: validated.newDepartmentId || newHolder.departmentId,
-          locationId: validated.newLocationId || newHolder.locationId,
-        },
-      });
-
-      const prevHolder = asset.currentHolderId ? await tx.employee.findUnique({ where: { id: asset.currentHolderId } }) : null;
-      const prevDept = asset.departmentId ? await tx.department.findUnique({ where: { id: asset.departmentId } }) : null;
-      const prevLoc = asset.locationId ? await tx.location.findUnique({ where: { id: asset.locationId } }) : null;
-      const targetDeptId = validated.newDepartmentId || newHolder.departmentId;
-      const newDept = targetDeptId ? await tx.department.findUnique({ where: { id: targetDeptId } }) : null;
-      const targetLocId = validated.newLocationId || newHolder.locationId;
-      const newLoc = targetLocId ? await tx.location.findUnique({ where: { id: targetLocId } }) : null;
-
-      await HistoryService.recordEvent(tx, {
-        assetId,
-        action: AssetAction.TRANSFERRED,
-        previousStatus: asset.status,
-        newStatus: asset.status,
-        previousHolderId: asset.currentHolderId,
-        previousHolderName: prevHolder?.fullName || asset.employeeNameSource || 'IT STOCK',
-        newHolderId: validated.newHolderId,
-        newHolderName: newHolder.fullName,
-        previousDepartmentId: asset.departmentId,
-        previousDepartmentName: prevDept?.name || asset.location,
-        newDepartmentId: targetDeptId || null,
-        newDepartmentName: newDept?.name || prevDept?.name || asset.location,
-        previousLocationId: asset.locationId,
-        previousLocationName: prevLoc?.name || asset.location,
-        newLocationId: targetLocId || null,
-        newLocationName: newLoc?.name || prevLoc?.name || asset.location,
-        performedById: userId,
-        eventDate: new Date(),
-        reason: validated.reason,
-        remarks: validated.remarks || `Transferred to ${newHolder.fullName} (${newHolder.employeeCode})`,
-      });
-
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: 'ASSET_TRANSFER',
-          entityType: 'AssetTransfer',
-          entityId: transfer.id,
-          oldValue: JSON.stringify({ previousHolderId: asset.currentHolderId }),
-          newValue: JSON.stringify({ newHolderId: validated.newHolderId }),
-        },
-      });
-
-      return transfer;
-    });
+    return await TransferService.createTransfer({ ...(data as any), assetId }, userId);
   }
 
   static async returnAsset(assetId: string, data: unknown, userId: string) {
-    const asset = await prisma.asset.findUnique({ where: { id: assetId } });
-    if (!asset) throw new Error('Asset not found');
-    if (!asset.currentHolderId) throw new Error('Asset is not currently assigned to any employee.');
-
-    const validated = AssetReturnSchema.parse(data);
-    const previousHolderId = asset.currentHolderId;
-
-    return await prisma.$transaction(async (tx) => {
-      const returnRec = await tx.assetReturn.create({
-        data: {
-          assetId,
-          employeeId: previousHolderId,
-          receivedById: userId,
-          returnDate: new Date(),
-          conditionAtReturn: validated.conditionAtReturn,
-          accessoriesReturned: validated.accessoriesReturned,
-          damageReported: validated.damageReported,
-          missingAccessories: validated.missingAccessories,
-          remarks: validated.remarks,
-          status: WorkflowStatus.COMPLETED,
-        },
-      });
-
-      // Deactivate active assignment records
-      await tx.assetAssignment.updateMany({
-        where: { assetId, employeeId: previousHolderId, status: WorkflowStatus.ACTIVE },
-        data: { status: WorkflowStatus.COMPLETED },
-      });
-
-      const nextStatus = validated.damageReported ? AssetStatus.UNDER_REPAIR : AssetStatus.AVAILABLE;
-
-      await tx.asset.update({
-        where: { id: assetId },
-        data: {
-          status: nextStatus,
-          condition: validated.conditionAtReturn,
-          currentHolderId: null,
-        },
-      });
-
-      const prevHolder = previousHolderId ? await tx.employee.findUnique({ where: { id: previousHolderId } }) : null;
-      const prevDept = asset.departmentId ? await tx.department.findUnique({ where: { id: asset.departmentId } }) : null;
-
-      await HistoryService.recordEvent(tx, {
-        assetId,
-        action: AssetAction.RETURNED,
-        previousStatus: asset.status,
-        newStatus: nextStatus,
-        previousHolderId,
-        previousHolderName: prevHolder?.fullName || 'Employee',
-        newHolderName: 'IT STOCK',
-        previousDepartmentId: asset.departmentId,
-        previousDepartmentName: prevDept?.name || asset.location,
-        newDepartmentName: 'IT STOCK',
-        previousCondition: asset.condition,
-        newCondition: validated.conditionAtReturn,
-        performedById: userId,
-        eventDate: new Date(),
-        remarks: `Returned by employee. Accessories returned: ${validated.accessoriesReturned}. Damage reported: ${validated.damageReported}${validated.remarks ? ' | ' + validated.remarks : ''}`,
-      });
-
-      await tx.auditLog.create({
-        data: {
-          userId,
-          action: 'ASSET_RETURN',
-          entityType: 'AssetReturn',
-          entityId: returnRec.id,
-          newValue: JSON.stringify({ assetId, previousHolderId, nextStatus }),
-        },
-      });
-
-      return returnRec;
-    });
+    return await ReturnService.createReturn({ ...(data as any), assetId }, userId);
   }
 
   static async createMaintenance(data: unknown, userId: string) {

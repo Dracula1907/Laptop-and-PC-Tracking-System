@@ -104,6 +104,7 @@ export const Dashboard: React.FC = () => {
   const [summary, setSummary] = useState<any>(null);
   const [charts, setCharts] = useState<any>(null);
   const [assets, setAssets] = useState<any[]>([]);
+  const [approvalCounts, setApprovalCounts] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [showTable, setShowTable] = useState<boolean>(false);
@@ -117,10 +118,11 @@ export const Dashboard: React.FC = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const [sumRes, chartRes, assetRes]: any = await Promise.all([
+      const [sumRes, chartRes, assetRes, appRes]: any = await Promise.all([
         api.get('/dashboard/summary'),
         api.get('/dashboard/charts'),
         api.get('/assets?limit=100'),
+        api.get('/approvals/counts').catch(() => null),
       ]);
       const isSumSuccess = sumRes?.success ?? sumRes?.data?.success;
       const sumData = sumRes?.data ?? sumRes;
@@ -133,6 +135,10 @@ export const Dashboard: React.FC = () => {
       const isAssetSuccess = assetRes?.success ?? assetRes?.data?.success;
       const assetData = assetRes?.data ?? assetRes;
       if (isAssetSuccess && assetData) setAssets(assetData?.assets || assetData || []);
+
+      if (appRes?.success && appRes.data) {
+        setApprovalCounts(appRes.data);
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
     } finally {
@@ -328,6 +334,29 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* ══ PENDING APPROVALS INDICATOR BANNER ═══════════════════════════ */}
+        {approvalCounts && approvalCounts.pending > 0 && (
+          <div
+            onClick={() => navigate('/approvals')}
+            className="cursor-pointer py-2 px-4 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 via-[#0E131F] to-[#0E131F] flex items-center justify-between hover:border-amber-400 transition-all shadow-md group"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+              <span className="text-xs font-semibold text-slate-200">
+                <strong className="text-amber-300 font-mono text-sm">{approvalCounts.pending}</strong> Asset Workflow Approvals Pending Review
+              </span>
+              {approvalCounts.urgent > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-rose-500/20 text-rose-400 font-bold border border-rose-500/40 animate-pulse">
+                  {approvalCounts.urgent} URGENT
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-amber-400 font-bold group-hover:underline flex items-center gap-1 font-mono">
+              Open Approval Center &rarr;
+            </span>
+          </div>
+        )}
 
         {/* ══ TELEMETRY RAIL ═══════════════════════════════════════════════ */}
         <div className="relative flex items-center w-full px-1">

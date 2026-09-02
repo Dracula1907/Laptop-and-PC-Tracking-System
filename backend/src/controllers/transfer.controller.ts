@@ -1,73 +1,20 @@
 import { Response } from 'express';
-import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../types';
-import { AssetService } from '../services/asset.service';
+import { TransferService } from '../services/transfer.service';
 import { logger } from '../utils/logger';
-import { WorkflowStatus } from '@prisma/client';
 
 export class TransferController {
   /**
-   * Get all asset transfer records
+   * Get transfers with server search, filtering, and pagination
    */
   public static async getTransfers(req: AuthenticatedRequest, res: Response) {
     try {
-      const transfers = await prisma.assetTransfer.findMany({
-        orderBy: { transferDate: 'desc' },
-        include: {
-          asset: {
-            include: {
-              department: true,
-              locationRel: true,
-            },
-          },
-          previousHolder: {
-            include: { department: true, location: true },
-          },
-          newHolder: {
-            include: { department: true, location: true },
-          },
-          previousDepartment: true,
-          newDepartment: true,
-          previousLocation: true,
-          newLocation: true,
-          requestedBy: {
-            select: { id: true, username: true },
-          },
-          approvedBy: {
-            select: { id: true, username: true },
-          },
-        },
-      });
-
-      const formatted = transfers.map((t) => ({
-        id: t.id,
-        assetId: t.assetId,
-        assetCode: t.asset.companyAssetId || t.asset.assetCode,
-        assetName: t.asset.assetName || t.asset.model,
-        serialNumber: t.asset.serialNumber || '—',
-        assetType: t.asset.sourceAssetType || t.asset.assetType,
-        previousHolderId: t.previousHolderId,
-        previousHolderName: t.previousHolder?.fullName || 'None',
-        previousHolderCode: t.previousHolder?.employeeCode || '—',
-        newHolderId: t.newHolderId,
-        newHolderName: t.newHolder?.fullName || '—',
-        newHolderCode: t.newHolder?.employeeCode || '—',
-        previousDepartmentName: t.previousDepartment?.name || '—',
-        newDepartmentName: t.newDepartment?.name || t.newHolder?.department?.name || '—',
-        previousLocationName: t.previousLocation?.name || '—',
-        newLocationName: t.newLocation?.name || t.newHolder?.location?.name || '—',
-        transferDate: t.transferDate,
-        reason: t.reason || 'Routine organizational transfer',
-        remarks: t.remarks || '—',
-        status: t.status,
-        requestedByName: t.requestedBy?.username || 'admin',
-        approvedByName: t.approvedBy?.username || '—',
-      }));
-
+      const result = await TransferService.getTransfers(req.query);
       return res.json({
         success: true,
-        data: formatted,
-        total: formatted.length,
+        data: result.transfers,
+        pagination: result.pagination,
+        total: result.pagination.total,
       });
     } catch (err: any) {
       logger.error('Error fetching transfers:', err);
@@ -76,72 +23,41 @@ export class TransferController {
   }
 
   /**
-   * Get options for creating a transfer (allocated assets, employees, departments, locations)
+   * Get real-time transfer counters directly from PostgreSQL
+   */
+  public static async getCounts(req: AuthenticatedRequest, res: Response) {
+    try {
+      const counts = await TransferService.getTransferCounts();
+      return res.json({ success: true, data: counts });
+    } catch (err: any) {
+      logger.error('Error fetching transfer counts:', err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Get options with current asset state preview
    */
   public static async getOptions(req: AuthenticatedRequest, res: Response) {
     try {
-      const [assets, employees, departments, locations] = await Promise.all([
-        prisma.asset.findMany({
-          select: {
-            id: true,
-            companyAssetId: true,
-            assetCode: true,
-            assetName: true,
-            model: true,
-            serialNumber: true,
-            currentHolderId: true,
-            departmentId: true,
-            locationId: true,
-            location: true,
-            currentHolder: {
-              select: { id: true, fullName: true, employeeCode: true },
-            },
-            department: {
-              select: { id: true, name: true },
-            },
-            locationRel: {
-              select: { id: true, name: true },
-            },
-          },
-          orderBy: { companyAssetId: 'asc' },
-        }),
-        prisma.employee.findMany({
-          where: { status: 'ACTIVE' },
-          select: {
-            id: true,
-            employeeCode: true,
-            fullName: true,
-            departmentId: true,
-            locationId: true,
-            department: { select: { id: true, name: true } },
-            location: { select: { id: true, name: true } },
-          },
-          orderBy: { fullName: 'asc' },
-        }),
-        prisma.department.findMany({
-          where: { isActive: true },
-          select: { id: true, name: true, code: true },
-          orderBy: { name: 'asc' },
-        }),
-        prisma.location.findMany({
-          where: { isActive: true },
-          select: { id: true, name: true, code: true },
-          orderBy: { name: 'asc' },
-        }),
-      ]);
-
-      return res.json({
-        success: true,
-        data: {
-          assets,
-          employees,
-          departments,
-          locations,
-        },
-      });
+      const options = await TransferService.getOptions();
+      return res.json({ success: true, data: options });
     } catch (err: any) {
       logger.error('Error fetching transfer options:', err);
       return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Get single transfer details by ID or code
+   */
+  public static async getTransferById(req: AuthenticatedRequest, res: Response) {
+    try {
+      const transfer = await TransferService.getTransferById(req.params.id);
+      return res.json({ success: true, data: transfer });
+    } catch (err: any) {
+      logger.error('Error fetching transfer details:', err);
+      return res.status(404).json({ success: false, message: err.message });
     }
   }
 
@@ -150,32 +66,11 @@ export class TransferController {
    */
   public static async createTransfer(req: AuthenticatedRequest, res: Response) {
     try {
-      const { assetId, newHolderId, newDepartmentId, newLocationId, reason, remarks } = req.body;
-
-      if (!assetId) {
-        return res.status(400).json({ success: false, message: 'Asset ID is required.' });
-      }
-      if (!newHolderId) {
-        return res.status(400).json({ success: false, message: 'Target employee (new holder) is required.' });
-      }
-
-      const userId = req.user?.userId || (await prisma.user.findFirst({ where: { username: 'admin' } }))?.id || '';
-
-      const transfer = await AssetService.transferAsset(
-        assetId,
-        {
-          newHolderId,
-          newDepartmentId,
-          newLocationId,
-          reason: reason || 'Departmental handover',
-          remarks: remarks || 'Processed via Transfers module',
-        },
-        userId
-      );
-
+      const userId = req.user!.userId;
+      const transfer = await TransferService.createTransfer(req.body, userId);
       return res.status(201).json({
         success: true,
-        message: 'Asset transfer processed successfully.',
+        message: 'Asset transfer record created successfully.',
         data: transfer,
       });
     } catch (err: any) {
@@ -185,42 +80,15 @@ export class TransferController {
   }
 
   /**
-   * Update an existing transfer
+   * Update a pending transfer
    */
   public static async updateTransfer(req: AuthenticatedRequest, res: Response) {
     try {
-      const { reason, remarks, status } = req.body;
-      const id = req.params.id;
-
-      const existing = await prisma.assetTransfer.findUnique({ where: { id } });
-      if (!existing) {
-        return res.status(404).json({ success: false, message: 'Transfer record not found.' });
-      }
-
-      const updated = await prisma.assetTransfer.update({
-        where: { id },
-        data: {
-          reason: reason !== undefined ? reason : existing.reason,
-          remarks: remarks !== undefined ? remarks : existing.remarks,
-          status: status || existing.status,
-        },
-      });
-
-      const userId = req.user?.userId || '';
-      await prisma.auditLog.create({
-        data: {
-          userId,
-          action: 'TRANSFER_UPDATE',
-          entityType: 'AssetTransfer',
-          entityId: id,
-          oldValue: JSON.stringify({ reason: existing.reason, status: existing.status }),
-          newValue: JSON.stringify({ reason: updated.reason, status: updated.status }),
-        },
-      });
-
+      const userId = req.user!.userId;
+      const updated = await TransferService.updateTransfer(req.params.id, req.body, userId);
       return res.json({
         success: true,
-        message: 'Transfer record updated successfully.',
+        message: 'Transfer updated successfully.',
         data: updated,
       });
     } catch (err: any) {
@@ -230,35 +98,55 @@ export class TransferController {
   }
 
   /**
-   * Delete a transfer record
+   * Complete / Authorize a pending transfer
    */
-  public static async deleteTransfer(req: AuthenticatedRequest, res: Response) {
+  public static async completeTransfer(req: AuthenticatedRequest, res: Response) {
     try {
-      const id = req.params.id;
-      const existing = await prisma.assetTransfer.findUnique({ where: { id } });
-      if (!existing) {
-        return res.status(404).json({ success: false, message: 'Transfer record not found.' });
-      }
-
-      await prisma.assetTransfer.delete({ where: { id } });
-
-      const userId = req.user?.userId || '';
-      await prisma.auditLog.create({
-        data: {
-          userId,
-          action: 'TRANSFER_DELETE',
-          entityType: 'AssetTransfer',
-          entityId: id,
-          oldValue: JSON.stringify({ assetId: existing.assetId, transferDate: existing.transferDate }),
-        },
-      });
-
+      const userId = req.user!.userId;
+      const completed = await TransferService.completeTransfer(req.params.id, userId);
       return res.json({
         success: true,
-        message: 'Transfer record deleted successfully.',
+        message: 'Transfer authorized and completed successfully. Asset state synchronized.',
+        data: completed,
       });
     } catch (err: any) {
-      logger.error('Error deleting transfer:', err);
+      logger.error('Error completing transfer:', err);
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Cancel a pending transfer
+   */
+  public static async cancelTransfer(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const result = await TransferService.cancelTransfer(req.params.id, req.body, userId);
+      return res.json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (err: any) {
+      logger.error('Error cancelling transfer:', err);
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Reverse a completed transfer
+   */
+  public static async reverseTransfer(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const result = await TransferService.reverseTransfer(req.params.id, req.body, userId);
+      return res.json({
+        success: true,
+        message: result.message,
+        data: result,
+      });
+    } catch (err: any) {
+      logger.error('Error reversing transfer:', err);
       return res.status(400).json({ success: false, message: err.message });
     }
   }

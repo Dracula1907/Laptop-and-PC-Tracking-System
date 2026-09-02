@@ -1,58 +1,20 @@
 import { Response } from 'express';
-import prisma from '../config/prisma';
 import { AuthenticatedRequest } from '../types';
-import { AssetService } from '../services/asset.service';
+import { ReturnService } from '../services/return.service';
 import { logger } from '../utils/logger';
 
 export class ReturnController {
   /**
-   * Get all asset return records
+   * Get returns with server-side pagination, search, and combined filters
    */
   public static async getReturns(req: AuthenticatedRequest, res: Response) {
     try {
-      const returns = await prisma.assetReturn.findMany({
-        orderBy: { returnDate: 'desc' },
-        include: {
-          asset: {
-            include: {
-              department: true,
-              locationRel: true,
-            },
-          },
-          employee: {
-            include: { department: true, location: true },
-          },
-          receivedBy: {
-            select: { id: true, username: true },
-          },
-        },
-      });
-
-      const formatted = returns.map((r) => ({
-        id: r.id,
-        assetId: r.assetId,
-        assetCode: r.asset.companyAssetId || r.asset.assetCode,
-        assetName: r.asset.assetName || r.asset.model,
-        serialNumber: r.asset.serialNumber || '—',
-        assetType: r.asset.sourceAssetType || r.asset.assetType,
-        employeeId: r.employeeId,
-        employeeName: r.employee?.fullName || '—',
-        employeeCode: r.employee?.employeeCode || '—',
-        departmentName: r.employee?.department?.name || r.asset.department?.name || 'General',
-        receivedByName: r.receivedBy?.username || 'admin',
-        returnDate: r.returnDate,
-        conditionAtReturn: r.conditionAtReturn,
-        accessoriesReturned: r.accessoriesReturned,
-        damageReported: r.damageReported,
-        missingAccessories: r.missingAccessories || 'None',
-        remarks: r.remarks || 'Standard asset return handover',
-        status: r.status,
-      }));
-
+      const result = await ReturnService.getReturns(req.query);
       return res.json({
         success: true,
-        data: formatted,
-        total: formatted.length,
+        data: result.returns,
+        pagination: result.pagination,
+        total: result.pagination.total,
       });
     } catch (err: any) {
       logger.error('Error fetching returns:', err);
@@ -61,47 +23,25 @@ export class ReturnController {
   }
 
   /**
-   * Get options for creating a return (allocated assets and employee custodians)
+   * Get live PostgreSQL aggregate counters
+   */
+  public static async getCounts(req: AuthenticatedRequest, res: Response) {
+    try {
+      const counts = await ReturnService.getReturnCounts();
+      return res.json({ success: true, data: counts });
+    } catch (err: any) {
+      logger.error('Error fetching return counts:', err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Get options with complete current asset state preview
    */
   public static async getOptions(req: AuthenticatedRequest, res: Response) {
     try {
-      const [assets, employees] = await Promise.all([
-        prisma.asset.findMany({
-          select: {
-            id: true,
-            companyAssetId: true,
-            assetCode: true,
-            assetName: true,
-            model: true,
-            serialNumber: true,
-            currentHolderId: true,
-            condition: true,
-            status: true,
-            currentHolder: {
-              select: { id: true, fullName: true, employeeCode: true },
-            },
-          },
-          orderBy: { companyAssetId: 'asc' },
-        }),
-        prisma.employee.findMany({
-          where: { status: 'ACTIVE' },
-          select: {
-            id: true,
-            employeeCode: true,
-            fullName: true,
-            department: { select: { id: true, name: true } },
-          },
-          orderBy: { fullName: 'asc' },
-        }),
-      ]);
-
-      return res.json({
-        success: true,
-        data: {
-          assets,
-          employees,
-        },
-      });
+      const options = await ReturnService.getOptions();
+      return res.json({ success: true, data: options });
     } catch (err: any) {
       logger.error('Error fetching return options:', err);
       return res.status(500).json({ success: false, message: err.message });
@@ -109,34 +49,29 @@ export class ReturnController {
   }
 
   /**
-   * Create a new asset return
+   * Get single return details by ID or code
+   */
+  public static async getReturnById(req: AuthenticatedRequest, res: Response) {
+    try {
+      const returnRec = await ReturnService.getReturnById(req.params.id);
+      return res.json({ success: true, data: returnRec });
+    } catch (err: any) {
+      logger.error('Error fetching return details:', err);
+      return res.status(404).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Create a new return (Initiation or immediate completion)
    */
   public static async createReturn(req: AuthenticatedRequest, res: Response) {
     try {
-      const { assetId, conditionAtReturn, accessoriesReturned, damageReported, missingAccessories, remarks } = req.body;
-
-      if (!assetId) {
-        return res.status(400).json({ success: false, message: 'Asset ID is required.' });
-      }
-
-      const userId = req.user?.userId || (await prisma.user.findFirst({ where: { username: 'admin' } }))?.id || '';
-
-      const returnRec = await AssetService.returnAsset(
-        assetId,
-        {
-          conditionAtReturn: conditionAtReturn || 'GOOD',
-          accessoriesReturned: accessoriesReturned !== false,
-          damageReported: Boolean(damageReported),
-          missingAccessories: missingAccessories || null,
-          remarks: remarks || 'Returned to IT inventory',
-        },
-        userId
-      );
-
+      const userId = req.user!.userId;
+      const created = await ReturnService.createReturn(req.body, userId);
       return res.status(201).json({
         success: true,
-        message: 'Asset returned to stock successfully.',
-        data: returnRec,
+        message: 'Asset return record processed successfully.',
+        data: created,
       });
     } catch (err: any) {
       logger.error('Error creating return:', err);
@@ -145,41 +80,84 @@ export class ReturnController {
   }
 
   /**
-   * Update an existing return
+   * Receive a pending return (Physical receipt)
+   */
+  public static async receiveReturn(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const updated = await ReturnService.receiveReturn(req.params.id, req.body, userId);
+      return res.json({
+        success: true,
+        message: 'Asset marked as physically received at facility.',
+        data: updated,
+      });
+    } catch (err: any) {
+      logger.error('Error receiving return:', err);
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Inspect a received return (Checklist & Diagnostics)
+   */
+  public static async inspectReturn(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const updated = await ReturnService.inspectReturn(req.params.id, req.body, userId);
+      return res.json({
+        success: true,
+        message: 'Physical inspection and diagnostic results recorded successfully.',
+        data: updated,
+      });
+    } catch (err: any) {
+      logger.error('Error inspecting return:', err);
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Complete a return (Finalize workflow and update asset state)
+   */
+  public static async completeReturn(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const updated = await ReturnService.completeReturn(req.params.id, req.body, userId);
+      return res.json({
+        success: true,
+        message: 'Asset return completed successfully. Custody and inventory synchronized.',
+        data: updated,
+      });
+    } catch (err: any) {
+      logger.error('Error completing return:', err);
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Cancel a pending or received return
+   */
+  public static async cancelReturn(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const result = await ReturnService.cancelReturn(req.params.id, req.body, userId);
+      return res.json({
+        success: true,
+        message: result.message,
+        data: result.returnRecord,
+      });
+    } catch (err: any) {
+      logger.error('Error cancelling return:', err);
+      return res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  /**
+   * Safe update of return record
    */
   public static async updateReturn(req: AuthenticatedRequest, res: Response) {
     try {
-      const { conditionAtReturn, accessoriesReturned, damageReported, missingAccessories, remarks } = req.body;
-      const id = req.params.id;
-
-      const existing = await prisma.assetReturn.findUnique({ where: { id } });
-      if (!existing) {
-        return res.status(404).json({ success: false, message: 'Return record not found.' });
-      }
-
-      const updated = await prisma.assetReturn.update({
-        where: { id },
-        data: {
-          conditionAtReturn: conditionAtReturn || existing.conditionAtReturn,
-          accessoriesReturned: accessoriesReturned !== undefined ? accessoriesReturned : existing.accessoriesReturned,
-          damageReported: damageReported !== undefined ? damageReported : existing.damageReported,
-          missingAccessories: missingAccessories !== undefined ? missingAccessories : existing.missingAccessories,
-          remarks: remarks !== undefined ? remarks : existing.remarks,
-        },
-      });
-
-      const userId = req.user?.userId || '';
-      await prisma.auditLog.create({
-        data: {
-          userId,
-          action: 'RETURN_UPDATE',
-          entityType: 'AssetReturn',
-          entityId: id,
-          oldValue: JSON.stringify({ condition: existing.conditionAtReturn, damage: existing.damageReported }),
-          newValue: JSON.stringify({ condition: updated.conditionAtReturn, damage: updated.damageReported }),
-        },
-      });
-
+      const userId = req.user!.userId;
+      const updated = await ReturnService.updateReturn(req.params.id, req.body, userId);
       return res.json({
         success: true,
         message: 'Return record updated successfully.',
@@ -187,40 +165,6 @@ export class ReturnController {
       });
     } catch (err: any) {
       logger.error('Error updating return:', err);
-      return res.status(400).json({ success: false, message: err.message });
-    }
-  }
-
-  /**
-   * Delete a return record
-   */
-  public static async deleteReturn(req: AuthenticatedRequest, res: Response) {
-    try {
-      const id = req.params.id;
-      const existing = await prisma.assetReturn.findUnique({ where: { id } });
-      if (!existing) {
-        return res.status(404).json({ success: false, message: 'Return record not found.' });
-      }
-
-      await prisma.assetReturn.delete({ where: { id } });
-
-      const userId = req.user?.userId || '';
-      await prisma.auditLog.create({
-        data: {
-          userId,
-          action: 'RETURN_DELETE',
-          entityType: 'AssetReturn',
-          entityId: id,
-          oldValue: JSON.stringify({ assetId: existing.assetId, returnDate: existing.returnDate }),
-        },
-      });
-
-      return res.json({
-        success: true,
-        message: 'Return record deleted successfully.',
-      });
-    } catch (err: any) {
-      logger.error('Error deleting return:', err);
       return res.status(400).json({ success: false, message: err.message });
     }
   }

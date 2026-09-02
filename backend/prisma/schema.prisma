@@ -58,13 +58,20 @@ enum WorkflowStatus {
   ACTIVE
   COMPLETED
   CANCELLED
+  RETURNED
+  RECEIVED
+  INSPECTED
 }
 
 enum MaintenanceStatus {
+  OPEN
+  ASSIGNED
   REPORTED
   APPROVED
   IN_PROGRESS
+  WAITING_PARTS
   WAITING_FOR_PARTS
+  WAITING_VENDOR
   COMPLETED
   CANCELLED
 }
@@ -72,21 +79,37 @@ enum MaintenanceStatus {
 enum AssetAction {
   CREATED
   ASSET_CREATED
+  ASSET_IMPORTED
   ASSIGNED
+  ASSET_ASSIGNED
+  ASSIGNMENT_UPDATED
   TRANSFERRED
+  ASSET_TRANSFERRED
+  ASSET_RETURN_INITIATED
   RETURNED
+  ASSET_RETURNED
+  ASSET_INSPECTED
+  MAINTENANCE_OPENED
+  MAINTENANCE_STARTED
+  MAINTENANCE_UPDATED
+  MAINTENANCE_COMPLETED
   LOCATION_CHANGED
   DEPARTMENT_CHANGED
   HOLDER_CHANGED
+  EMPLOYEE_CHANGED
   STATUS_CHANGED
   CONDITION_CHANGED
-  MAINTENANCE_STARTED
-  MAINTENANCE_COMPLETED
+  ALLOCATION_CHANGED
+  DISPOSITION_CHANGED
+  HARDWARE_CHANGED
   DAMAGED
   LOST
   FOUND
   RETIRED
+  ASSET_DEACTIVATED
+  ASSET_REACTIVATED
   SCRAPPED
+  CORRECTION_RECORDED
 }
 
 enum AllocationStatus {
@@ -130,6 +153,62 @@ enum ImportStatus {
   IMPORTED
   PARTIAL
   FAILED
+}
+
+enum ApprovalRequestType {
+  ASSIGNMENT
+  TRANSFER
+  RETURN_DISPOSITION
+  MAINTENANCE_COMPLETION
+  ASSET_STATUS_CHANGE
+  ASSET_DEACTIVATION
+  ASSET_RETIREMENT
+  SENSITIVE_UPDATE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  CANCELLED
+  EXPIRED
+}
+
+enum ApprovalPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum WarrantyType {
+  STANDARD
+  EXTENDED
+  ONSITE
+  DEPOT
+  ACCIDENTAL_DAMAGE
+  LIMITED
+  SERVICE_CONTRACT
+  OTHER
+}
+
+enum CoverageStatus {
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  CANCELLED
+}
+
+enum ClaimStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  IN_SERVICE
+  RESOLVED
+  CANCELLED
 }
 
 model Role {
@@ -183,10 +262,19 @@ model User {
   requestedTransfers   AssetTransfer[]   @relation("RequestedByTransferRelation")
   approvedTransfers    AssetTransfer[]   @relation("ApprovedByTransferRelation")
   receivedReturns      AssetReturn[]     @relation("ReceivedByReturnRelation")
+  inspectedReturns     AssetReturn[]     @relation("InspectedByReturnRelation")
+  approvedReturns      AssetReturn[]     @relation("ApprovedByReturnRelation")
   reportedMaintenance MaintenanceRecord[] @relation("ReportedByMaintenanceRelation")
+  assignedMaintenance MaintenanceRecord[] @relation("AssignedToMaintenanceRelation")
+  approvedMaintenance MaintenanceRecord[] @relation("ApprovedByMaintenanceRelation")
   historyPerformed     AssetStatusHistory[] @relation("PerformedByRelation")
   historyApproved      AssetStatusHistory[] @relation("ApprovedByHistoryRelation")
   importBatches        ImportBatch[]
+  requestedApprovals   ApprovalRequest[] @relation("RequestedByApprovalRelation")
+  decidedApprovals     ApprovalRequest[] @relation("DecisionByApprovalRelation")
+  approvalHistories    ApprovalHistory[] @relation("ApprovalHistoryPerformedByRelation")
+  createdWarranties    Warranty[]        @relation("WarrantyCreatedByRelation")
+  createdClaims        WarrantyClaim[]   @relation("ClaimCreatedByRelation")
 }
 
 model Department {
@@ -194,16 +282,31 @@ model Department {
   name        String
   code        String   @unique
   description String?
+  managerId   String?
+  manager     Employee? @relation("DepartmentManagerRelation", fields: [managerId], references: [id])
+  locationId  String?
+  location    Location? @relation("DepartmentDefaultLocationRelation", fields: [locationId], references: [id])
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   employees Employee[]
   assets    Asset[]
+  assignments AssetAssignment[]
   previousTransfers AssetTransfer[] @relation("PreviousDeptRelation")
   newTransfers      AssetTransfer[] @relation("NewDeptRelation")
   previousHistory   AssetStatusHistory[] @relation("PreviousDeptHistoryRelation")
   newHistory        AssetStatusHistory[] @relation("NewDeptHistoryRelation")
+  returns           AssetReturn[]
+  maintenance       MaintenanceRecord[]
+  defaultLocations  Location[] @relation("LocationDefaultDeptRelation")
+  targetedApprovals ApprovalRequest[] @relation("ApprovalTargetDeptRelation")
+
+  @@index([name])
+  @@index([code])
+  @@index([isActive])
+  @@index([managerId])
+  @@index([locationId])
 }
 
 model Location {
@@ -211,16 +314,32 @@ model Location {
   name        String
   code        String   @unique
   address     String?
+  description String?
+  building    String?
+  floor       String?
+  roomZone    String?
+  city        String?
+  departmentId String?
+  department  Department? @relation("LocationDefaultDeptRelation", fields: [departmentId], references: [id])
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   employees Employee[]
   assets    Asset[]
+  assignments AssetAssignment[]
   previousTransfers AssetTransfer[] @relation("PreviousLocRelation")
   newTransfers      AssetTransfer[] @relation("NewLocRelation")
   previousHistory   AssetStatusHistory[] @relation("PreviousLocationHistoryRelation")
   newHistory        AssetStatusHistory[] @relation("NewLocationHistoryRelation")
+  returns           AssetReturn[]
+  maintenance       MaintenanceRecord[]
+  departmentLocations Department[] @relation("DepartmentDefaultLocationRelation")
+
+  @@index([name])
+  @@index([code])
+  @@index([isActive])
+  @@index([departmentId])
 }
 
 model Employee {
@@ -235,7 +354,12 @@ model Employee {
   locationId   String
   location     Location       @relation(fields: [locationId], references: [id])
   joiningDate  DateTime?
+  exitDate     DateTime?
   status       EmployeeStatus @default(ACTIVE)
+  managerId    String?
+  manager      Employee?      @relation("EmployeeManagerRelation", fields: [managerId], references: [id])
+  subordinates Employee[]     @relation("EmployeeManagerRelation")
+  remarks      String?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
 
@@ -245,13 +369,17 @@ model Employee {
   previousTransfers  AssetTransfer[]  @relation("PreviousHolderRelation")
   newTransfers       AssetTransfer[]  @relation("NewHolderRelation")
   returns            AssetReturn[]
+  technicianMaintenance MaintenanceRecord[] @relation("TechnicianMaintenanceRelation")
   previousHistory    AssetStatusHistory[] @relation("PrevHolderHistoryRelation")
   newHistory         AssetStatusHistory[] @relation("NewHolderHistoryRelation")
+  managedDepartments Department[]     @relation("DepartmentManagerRelation")
 
   @@index([employeeCode])
   @@index([email])
   @@index([departmentId])
   @@index([locationId])
+  @@index([status])
+  @@index([managerId])
 }
 
 model Asset {
@@ -321,6 +449,9 @@ model Asset {
   returns                 AssetReturn[]
   maintenance             MaintenanceRecord[]
   statusHistory           AssetStatusHistory[]
+  approvalRequests        ApprovalRequest[]
+  warranties              Warranty[]
+  warrantyClaims          WarrantyClaim[]
 
   @@index([assetCode])
   @@index([companyAssetId])
@@ -335,6 +466,9 @@ model Asset {
   @@index([currentHolderId])
   @@index([departmentId])
   @@index([locationId])
+  @@index([location])
+  @@index([lanIp])
+  @@index([employeeNameSource])
   @@index([warrantyEnd])
 }
 
@@ -364,107 +498,210 @@ model AssetSpecification {
 }
 
 model AssetAssignment {
-  id                    String         @id @default(uuid())
+  id                    String          @id @default(uuid())
+  assignmentCode        String?         @unique
   assetId               String
-  asset                 Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  asset                 Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
   employeeId            String
-  employee              Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employee              Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  departmentId          String?
+  department            Department?     @relation(fields: [departmentId], references: [id])
+  locationId            String?
+  location              Location?       @relation(fields: [locationId], references: [id])
   assignedById          String
-  assignedBy            User           @relation("AssignedByRelation", fields: [assignedById], references: [id])
+  assignedBy            User            @relation("AssignedByRelation", fields: [assignedById], references: [id])
   approvedById          String?
-  approvedBy            User?          @relation("ApprovedByAssignmentRelation", fields: [approvedById], references: [id])
-  assignedAt            DateTime       @default(now())
+  approvedBy            User?           @relation("ApprovedByAssignmentRelation", fields: [approvedById], references: [id])
+  assignedAt            DateTime        @default(now())
   expectedReturnDate    DateTime?
-  conditionAtAssignment AssetCondition
+  actualReturnDate      DateTime?
+  conditionAtAssignment AssetCondition  @default(GOOD)
+  conditionAtReturn     AssetCondition?
+  reason                String?
   remarks               String?
-  status                WorkflowStatus @default(ACTIVE)
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  status                WorkflowStatus  @default(ACTIVE)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  returns               AssetReturn[]
 
   @@index([assetId])
   @@index([employeeId])
   @@index([status])
+  @@index([assignedAt])
+  @@index([expectedReturnDate])
+  @@index([departmentId])
+  @@index([locationId])
 }
 
 model AssetTransfer {
-  id                   String         @id @default(uuid())
+  id                   String          @id @default(uuid())
+  transferCode         String?         @unique
   assetId              String
-  asset                Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  asset                Asset           @relation(fields: [assetId], references: [id], onDelete: Cascade)
   previousHolderId     String?
-  previousHolder       Employee?      @relation("PreviousHolderRelation", fields: [previousHolderId], references: [id])
-  newHolderId          String
-  newHolder            Employee       @relation("NewHolderRelation", fields: [newHolderId], references: [id])
+  previousHolder       Employee?       @relation("PreviousHolderRelation", fields: [previousHolderId], references: [id])
+  newHolderId          String?
+  newHolder            Employee?       @relation("NewHolderRelation", fields: [newHolderId], references: [id])
   previousDepartmentId String?
-  previousDepartment   Department?    @relation("PreviousDeptRelation", fields: [previousDepartmentId], references: [id])
+  previousDepartment   Department?     @relation("PreviousDeptRelation", fields: [previousDepartmentId], references: [id])
   newDepartmentId      String?
-  newDepartment        Department?    @relation("NewDeptRelation", fields: [newDepartmentId], references: [id])
+  newDepartment        Department?     @relation("NewDeptRelation", fields: [newDepartmentId], references: [id])
   previousLocationId   String?
-  previousLocation     Location?      @relation("PreviousLocRelation", fields: [previousLocationId], references: [id])
+  previousLocation     Location?       @relation("PreviousLocRelation", fields: [previousLocationId], references: [id])
   newLocationId        String?
-  newLocation          Location?      @relation("NewLocRelation", fields: [newLocationId], references: [id])
+  newLocation          Location?       @relation("NewLocRelation", fields: [newLocationId], references: [id])
   requestedById        String
-  requestedBy          User           @relation("RequestedByTransferRelation", fields: [requestedById], references: [id])
+  requestedBy          User            @relation("RequestedByTransferRelation", fields: [requestedById], references: [id])
   approvedById         String?
-  approvedBy           User?          @relation("ApprovedByTransferRelation", fields: [approvedById], references: [id])
-  transferDate         DateTime       @default(now())
+  approvedBy           User?           @relation("ApprovedByTransferRelation", fields: [approvedById], references: [id])
+  transferDate         DateTime        @default(now())
+  effectiveDate        DateTime?
+  conditionBefore      AssetCondition?
+  conditionAfter       AssetCondition?
   reason               String?
   remarks              String?
-  status               WorkflowStatus @default(PENDING)
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  status               WorkflowStatus  @default(PENDING)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
 
   @@index([assetId])
+  @@index([previousHolderId])
   @@index([newHolderId])
+  @@index([previousDepartmentId])
+  @@index([newDepartmentId])
+  @@index([previousLocationId])
+  @@index([newLocationId])
   @@index([status])
+  @@index([transferDate])
 }
 
 model AssetReturn {
-  id                  String         @id @default(uuid())
+  id                  String             @id @default(uuid())
+  returnCode          String?            @unique
+  assignmentId        String?
+  assignment          AssetAssignment?   @relation(fields: [assignmentId], references: [id])
   assetId             String
-  asset               Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  employeeId          String
-  employee            Employee       @relation(fields: [employeeId], references: [id])
-  receivedById        String
-  receivedBy          User           @relation("ReceivedByReturnRelation", fields: [receivedById], references: [id])
-  returnDate          DateTime       @default(now())
-  conditionAtReturn   AssetCondition
-  accessoriesReturned Boolean        @default(true)
-  damageReported      Boolean        @default(false)
+  asset               Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employeeId          String?
+  employee            Employee?          @relation(fields: [employeeId], references: [id])
+  departmentId        String?
+  department          Department?        @relation(fields: [departmentId], references: [id])
+  locationId          String?
+  location            Location?          @relation(fields: [locationId], references: [id])
+  receivedById        String?
+  receivedBy          User?              @relation("ReceivedByReturnRelation", fields: [receivedById], references: [id])
+  returnDate          DateTime           @default(now())
+  returnReason        String?
+  conditionAtReturn   AssetCondition     @default(GOOD)
+  accessoriesReturned Boolean            @default(true)
+  damageReported      Boolean            @default(false)
+  damageCategory      String?
+  damageDescription   String?
   missingAccessories  String?
+  accessoriesChecklist Json?
+  dataWipeStatus      String?            @default("NOT_REQUIRED")
+  inspectionRequired  Boolean            @default(true)
+  inspectionResult    String?
+  inspectedById       String?
+  inspectedBy         User?              @relation("InspectedByReturnRelation", fields: [inspectedById], references: [id])
+  inspectedAt         DateTime?
+  inspectionRemarks   String?
+  maintenanceRequired Boolean            @default(false)
+  maintenanceId       String?
+  maintenance         MaintenanceRecord? @relation(fields: [maintenanceId], references: [id])
+  disposition         String?
+  approvedById        String?
+  approvedBy          User?              @relation("ApprovedByReturnRelation", fields: [approvedById], references: [id])
   remarks             String?
-  status              WorkflowStatus @default(COMPLETED)
-  createdAt           DateTime       @default(now())
-  updatedAt           DateTime       @updatedAt
+  status              WorkflowStatus     @default(COMPLETED)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
+  @@index([returnCode])
   @@index([assetId])
+  @@index([assignmentId])
   @@index([employeeId])
+  @@index([departmentId])
+  @@index([locationId])
+  @@index([status])
+  @@index([returnDate])
 }
 
 model MaintenanceRecord {
-  id               String            @id @default(uuid())
-  assetId          String
-  asset            Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  reportedById     String
-  reportedBy       User              @relation("ReportedByMaintenanceRelation", fields: [reportedById], references: [id])
-  issueTitle       String
-  issueDescription String
-  reportedAt       DateTime          @default(now())
-  repairStatus     MaintenanceStatus @default(REPORTED)
-  technician       String?
-  serviceProvider  String?
-  repairStartDate  DateTime?
-  repairEndDate    DateTime?
-  repairCost       Float?            @default(0.0)
-  resolution       String?
-  remarks          String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id                     String            @id @default(uuid())
+  maintenanceCode        String?           @unique
+  assetId                String
+  asset                  Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  reportedById           String
+  reportedBy             User              @relation("ReportedByMaintenanceRelation", fields: [reportedById], references: [id])
+  maintenanceType        String            @default("CORRECTIVE")
+  issueTitle             String
+  issueDescription       String
+  reportedAt             DateTime          @default(now())
+  priority               String            @default("MEDIUM")
+  repairStatus           MaintenanceStatus @default(OPEN)
+  technician             String?
+  technicianId           String?
+  technicianEmployee     Employee?         @relation("TechnicianMaintenanceRelation", fields: [technicianId], references: [id])
+  serviceProvider        String?
+  assignedToId           String?
+  assignedTo             User?             @relation("AssignedToMaintenanceRelation", fields: [assignedToId], references: [id])
+  assignedAt             DateTime?
+  diagnosis              String?
+  rootCause              String?
+  recommendedAction      String?
+  repairAction           String?
+  partsReplaced          String?
+  laborCost              Float?            @default(0.0)
+  partsCost              Float?            @default(0.0)
+  serviceCost            Float?            @default(0.0)
+  otherCost              Float?            @default(0.0)
+  repairCost             Float?            @default(0.0)
+  underWarranty          Boolean           @default(false)
+  warrantyProvider       String?
+  warrantyReference      String?
+  warrantyClaimNumber    String?
+  warrantyExpiry         DateTime?
+  warrantyCoverage       String?           @default("NOT_COVERED")
+  repairStartDate        DateTime?
+  expectedCompletionDate DateTime?
+  repairEndDate          DateTime?
+  conditionBefore        AssetCondition?   @default(GOOD)
+  conditionAfter         AssetCondition?
+  resolution             String?
+  finalDisposition       String?           @default("AVAILABLE")
+  remarks                String?
+  approvedById           String?
+  approvedBy             User?             @relation("ApprovedByMaintenanceRelation", fields: [approvedById], references: [id])
+  departmentId           String?
+  department             Department?       @relation(fields: [departmentId], references: [id])
+  locationId             String?
+  location               Location?         @relation(fields: [locationId], references: [id])
+  warrantyId             String?
+  warranty               Warranty?         @relation(fields: [warrantyId], references: [id], onDelete: SetNull)
+  coveredAmount          Float?
+  outOfPocketAmount      Float?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
 
-  parts            MaintenancePart[]
+  parts                  MaintenancePart[]
+  returns                AssetReturn[]
+  warrantyClaims         WarrantyClaim[]
 
+  @@index([maintenanceCode])
   @@index([assetId])
   @@index([repairStatus])
+  @@index([priority])
+  @@index([maintenanceType])
+  @@index([reportedAt])
+  @@index([expectedCompletionDate])
+  @@index([technicianId])
+  @@index([departmentId])
+  @@index([locationId])
+  @@index([warrantyId])
 }
+
 
 model MaintenancePart {
   id            String            @id @default(uuid())
@@ -485,6 +722,8 @@ model AssetStatusHistory {
   action                 AssetAction
   previousStatus         AssetStatus?
   newStatus              AssetStatus?
+  previousAllocationStatus AllocationStatus?
+  newAllocationStatus    AllocationStatus?
   previousHolderId       String?
   previousHolder         Employee?         @relation("PrevHolderHistoryRelation", fields: [previousHolderId], references: [id])
   previousHolderName     String?
@@ -511,6 +750,13 @@ model AssetStatusHistory {
   approvedById           String?
   approvedBy             User?             @relation("ApprovedByHistoryRelation", fields: [approvedById], references: [id])
   approvedByName         String?
+  relatedEntityType      String?
+  relatedEntityId        String?
+  relatedRecordCode      String?
+  isCorrection           Boolean           @default(false)
+  correctedHistoryId     String?
+  correctionReason       String?
+  snapshot               String?
   eventDate              DateTime          @default(now())
   reason                 String?
   remarks                String?
@@ -525,6 +771,10 @@ model AssetStatusHistory {
   @@index([newHolderId])
   @@index([newDepartmentId])
   @@index([newLocationId])
+  @@index([relatedEntityType, relatedEntityId])
+  @@index([relatedRecordCode])
+  @@index([correctedHistoryId])
+  @@index([isCorrection])
 }
 
 model AuditLog {
@@ -611,3 +861,169 @@ model ImportRowLog {
   @@index([importBatchId])
   @@index([companyAssetId])
 }
+
+model ApprovalRequest {
+  id                   String              @id @default(uuid())
+  requestCode          String              @unique
+  requestType          ApprovalRequestType
+  relatedEntityType    String?             // 'AssetAssignment', 'AssetTransfer', 'AssetReturn', 'MaintenanceRecord', 'Asset'
+  relatedEntityId      String?
+  assetId              String?
+  asset                Asset?              @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  requestedById        String
+  requestedBy          User                @relation("RequestedByApprovalRelation", fields: [requestedById], references: [id])
+  requestedAt          DateTime            @default(now())
+  status               ApprovalStatus      @default(PENDING)
+  priority             ApprovalPriority    @default(MEDIUM)
+  reason               String?
+  comments             String?
+  currentStep          Int                 @default(1)
+  totalSteps           Int                 @default(1)
+  targetRole           String?             // 'MANAGER', 'ADMIN', 'IT'
+  targetDepartmentId   String?
+  targetDepartment     Department?         @relation("ApprovalTargetDeptRelation", fields: [targetDepartmentId], references: [id])
+  decisionById         String?
+  decisionBy           User?               @relation("DecisionByApprovalRelation", fields: [decisionById], references: [id])
+  decisionAt           DateTime?
+  decisionComment      String?
+  rejectionReason      String?
+  changesRequested     String?
+  cancellationReason   String?
+  cancelledAt          DateTime?
+  proposedChanges      String              @db.Text
+  expectedSourceState  String?             @db.Text
+  approvalDeadline     DateTime?
+  version              Int                 @default(1)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  history              ApprovalHistory[]
+
+  @@index([requestCode])
+  @@index([requestType])
+  @@index([status])
+  @@index([priority])
+  @@index([assetId])
+  @@index([requestedById])
+  @@index([decisionById])
+  @@index([targetDepartmentId])
+  @@index([createdAt])
+  @@index([approvalDeadline])
+}
+
+model ApprovalHistory {
+  id                String          @id @default(uuid())
+  approvalRequestId String
+  approvalRequest   ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  step              Int             @default(1)
+  action            String          // 'SUBMITTED', 'RESUBMITTED', 'APPROVED', 'REJECTED', 'CHANGES_REQUESTED', 'CANCELLED', 'EXPIRED', 'EXECUTED'
+  performedById     String
+  performedBy       User            @relation("ApprovalHistoryPerformedByRelation", fields: [performedById], references: [id])
+  comment           String?
+  snapshot          String?         @db.Text
+  createdAt         DateTime        @default(now())
+
+  @@index([approvalRequestId])
+  @@index([action])
+  @@index([performedById])
+  @@index([createdAt])
+}
+
+model ApprovalPolicy {
+  id                String              @id @default(uuid())
+  operationType     ApprovalRequestType @unique
+  requiresApproval  Boolean             @default(true)
+  approverRole      String?             @default("MANAGER") // 'MANAGER', 'ADMIN', 'IT'
+  allowSelfApproval Boolean             @default(false)
+  autoExpireDays    Int?
+  description       String?
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([operationType])
+  @@index([isActive])
+}
+
+model Warranty {
+  id                  String            @id @default(uuid())
+  warrantyCode        String            @unique
+  assetId             String
+  asset               Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  warrantyType        WarrantyType      @default(STANDARD)
+  provider            String
+  policyNumber        String?
+  coverageDescription String?
+  startDate           DateTime
+  endDate             DateTime
+  status              CoverageStatus    @default(ACTIVE)
+  claimContact        String?
+  contactEmail        String?
+  contactPhone        String?
+  purchaseDate        DateTime?
+  purchaseReference   String?
+  warrantyCost        Float?
+  coverageNotes       String?
+  attachmentRef       String?
+  isExtended          Boolean           @default(false)
+  previousWarrantyId  String?
+  previousWarranty    Warranty?         @relation("WarrantyExtensionRelation", fields: [previousWarrantyId], references: [id], onDelete: SetNull)
+  extensionWarranties Warranty[]        @relation("WarrantyExtensionRelation")
+  extensionReason     String?
+  createdById         String
+  createdBy           User              @relation("WarrantyCreatedByRelation", fields: [createdById], references: [id])
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  claims              WarrantyClaim[]
+  maintenanceRecords  MaintenanceRecord[]
+
+  @@index([warrantyCode])
+  @@index([assetId])
+  @@index([provider])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([status])
+  @@index([warrantyType])
+  @@index([isExtended])
+}
+
+model WarrantyClaim {
+  id                String            @id @default(uuid())
+  claimNumber       String            @unique
+  warrantyId        String
+  warranty          Warranty          @relation(fields: [warrantyId], references: [id], onDelete: Cascade)
+  assetId           String
+  asset             Asset             @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  claimDate         DateTime          @default(now())
+  issue             String
+  description       String
+  provider          String
+  status            ClaimStatus       @default(SUBMITTED)
+  submittedDate     DateTime?         @default(now())
+  approvedDate      DateTime?
+  serviceDate       DateTime?
+  resolvedDate      DateTime?
+  resolution        String?
+  claimCost         Float?
+  warrantyCovered   Boolean           @default(true)
+  coveredAmount     Float?
+  outOfPocketAmount Float?
+  maintenanceId     String?
+  maintenance       MaintenanceRecord? @relation(fields: [maintenanceId], references: [id], onDelete: SetNull)
+  remarks           String?
+  createdById       String
+  createdBy         User              @relation("ClaimCreatedByRelation", fields: [createdById], references: [id])
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([claimNumber])
+  @@index([warrantyId])
+  @@index([assetId])
+  @@index([status])
+  @@index([claimDate])
+  @@index([provider])
+  @@index([maintenanceId])
+}
+
+

@@ -10,6 +10,7 @@ import {
   HolderVerificationStatus,
   DataQualityStatus,
   ImportStatus,
+  AssetAction,
 } from '@prisma/client';
 
 export const EXACT_EXCEL_COLUMNS = [
@@ -736,6 +737,29 @@ export class ExcelImportService {
           });
         }
       }
+
+      await prisma.assetStatusHistory.create({
+        data: {
+          assetId: newAsset.id,
+          action: AssetAction.ASSET_IMPORTED,
+          newStatus: newAsset.status,
+          newAllocationStatus: newAsset.allocationStatus,
+          newCondition: newAsset.condition,
+          newHolderId: employeeId || null,
+          newHolderName: row.employeeNameSource || (employeeId ? 'Assigned' : 'IT STOCK'),
+          newDepartmentId: newAsset.departmentId || null,
+          newDepartmentName: row.location || '—',
+          newLocationId: newAsset.locationId || null,
+          newLocationName: defaultLocation.name,
+          performedById: uploadedById || null,
+          performedByName: 'Import System',
+          relatedEntityType: 'ImportBatch',
+          relatedEntityId: batch.id,
+          relatedRecordCode: `BATCH-${batch.id.slice(0, 8)}`,
+          eventDate: new Date(),
+          remarks: `Asset imported from Excel row #${row.rowNumber} (${fileName}). Batch ID: ${batch.id}`,
+        },
+      });
 
       insertedCount++;
       await prisma.importRowLog.create({

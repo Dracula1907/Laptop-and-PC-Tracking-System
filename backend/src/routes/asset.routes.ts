@@ -14,13 +14,18 @@ router.use(authenticateJWT);
 
 router.post('/import', requirePermission('ASSET_CREATE'), upload.single('file'), ImportController.directImport);
 router.get('/departments', requirePermission('ASSET_VIEW'), AssetController.getDepartments);
+router.get('/locations', requirePermission('ASSET_VIEW'), AssetController.getLocations);
+router.get('/counts', requirePermission('ASSET_VIEW'), AssetController.getInventoryCounts);
 router.get('/history/all', requirePermission('ASSET_VIEW'), AssetController.getGlobalHistory);
 router.get('/', requirePermission('ASSET_VIEW'), AssetController.getAssets);
 router.get('/:id', requirePermission('ASSET_VIEW'), AssetController.getAssetById);
+router.get('/:id/history/summary', requirePermission('ASSET_VIEW'), AssetController.getAssetHistorySummary);
 router.get('/:id/history', requirePermission('ASSET_VIEW'), AssetController.getAssetHistory);
+router.post('/:id/history/:historyId/correction', requirePermission('ASSET_UPDATE'), AssetController.recordHistoryCorrection);
 router.post('/', requirePermission('ASSET_CREATE'), AssetController.createAsset);
 router.put('/:id', requirePermission('ASSET_UPDATE'), AssetController.updateAsset);
 router.put('/:id/hardware', requirePermission('ASSET_UPDATE'), AssetController.updateHardware);
+router.post('/:id/deactivate', requirePermission('ASSET_DEACTIVATE'), AssetController.deactivateAsset);
 router.delete('/:id', requirePermission('ASSET_DELETE'), AssetController.deleteAsset);
 
 router.post('/:id/assign', requirePermission('ASSIGNMENT_CREATE'), AssetController.assignAsset);

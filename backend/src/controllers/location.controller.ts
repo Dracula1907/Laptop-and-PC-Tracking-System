@@ -3,9 +3,18 @@ import { AuthenticatedRequest } from '../types';
 import { LocationService } from '../services/location.service';
 
 export class LocationController {
+  static async getLocationCounts(req: AuthenticatedRequest, res: Response) {
+    try {
+      const counts = await LocationService.getLocationCounts();
+      return res.status(200).json({ success: true, data: counts });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
   static async getLocations(req: AuthenticatedRequest, res: Response) {
     try {
-      const locs = await LocationService.getLocations();
+      const locs = await LocationService.getLocations(req.query);
       return res.status(200).json({ success: true, data: locs });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: error.message });
@@ -24,7 +33,7 @@ export class LocationController {
   static async createLocation(req: AuthenticatedRequest, res: Response) {
     try {
       const loc = await LocationService.createLocation(req.body, req.user!.userId);
-      return res.status(201).json({ success: true, data: loc });
+      return res.status(201).json({ success: true, data: loc, message: 'Location created successfully.' });
     } catch (error: any) {
       return res.status(400).json({ success: false, message: error.message });
     }
@@ -33,7 +42,25 @@ export class LocationController {
   static async updateLocation(req: AuthenticatedRequest, res: Response) {
     try {
       const loc = await LocationService.updateLocation(req.params.id, req.body, req.user!.userId);
-      return res.status(200).json({ success: true, data: loc });
+      return res.status(200).json({ success: true, data: loc, message: 'Location updated successfully.' });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async deactivateLocation(req: AuthenticatedRequest, res: Response) {
+    try {
+      const loc = await LocationService.deactivateLocation(req.params.id, req.user!.userId);
+      return res.status(200).json({ success: true, data: loc, message: 'Location deactivated successfully.' });
+    } catch (error: any) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
+  }
+
+  static async deleteLocation(req: AuthenticatedRequest, res: Response) {
+    try {
+      const result = await LocationService.deleteLocation(req.params.id, req.user!.userId);
+      return res.status(200).json(result);
     } catch (error: any) {
       return res.status(400).json({ success: false, message: error.message });
     }

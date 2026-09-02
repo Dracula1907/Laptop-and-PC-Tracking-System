@@ -13,6 +13,7 @@ import {
   FileBarChart,
   ClipboardList,
   ShieldCheck,
+  ShieldAlert,
   Settings,
   UserCheck,
   ChevronLeft,
@@ -80,6 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             <nav className="space-y-0.5">
               <NavItem to="/my-assets" icon={<Laptop className="w-4 h-4" />} label="My Assets" collapsed={collapsed} />
               <NavItem to="/my-maintenance" icon={<Wrench className="w-4 h-4" />} label="My Maintenance" collapsed={collapsed} />
+              <NavItem to="/approvals?queue=my_requests" icon={<ShieldCheck className="w-4 h-4 text-indigo-400" />} label="My Requests" collapsed={collapsed} />
               <NavItem to="/notifications" icon={<ClipboardList className="w-4 h-4" />} label="Notifications" collapsed={collapsed} />
             </nav>
           </div>
@@ -95,10 +97,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
               <nav className="space-y-0.5">
                 <NavItem to="/dashboard" icon={<LayoutDashboard className="w-4 h-4" />} label="Dashboard" collapsed={collapsed} />
                 <NavItem to="/assets" icon={<Laptop className="w-4 h-4" />} label="Assets Inventory" collapsed={collapsed} />
+                <NavItem to="/approvals" icon={<ShieldCheck className="w-4 h-4 text-amber-400" />} label="Approval Center" collapsed={collapsed} />
                 <NavItem to="/assignments" icon={<UserCheck className="w-4 h-4" />} label="Assignments" collapsed={collapsed} />
                 <NavItem to="/transfers" icon={<ArrowRightLeft className="w-4 h-4" />} label="Transfers" collapsed={collapsed} />
                 <NavItem to="/returns" icon={<RotateCcw className="w-4 h-4" />} label="Returns" collapsed={collapsed} />
                 <NavItem to="/maintenance" icon={<Wrench className="w-4 h-4" />} label="Maintenance" collapsed={collapsed} />
+                <NavItem to="/warranties" icon={<ShieldAlert className="w-4 h-4 text-indigo-400" />} label="Warranty & Contracts" collapsed={collapsed} />
               </nav>
             </div>
 
