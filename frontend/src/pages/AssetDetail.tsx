@@ -46,7 +46,11 @@ import {
   ShieldAlert,
   Receipt,
   Plus,
+  ScanLine,
+  Printer,
+  ShieldX,
 } from 'lucide-react';
+import { QRCodeCanvas } from 'qrcode.react';
 
 export const AssetDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -58,8 +62,8 @@ export const AssetDetail: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [employees, setEmployees] = useState<any[]>([]);
 
-  // History & Warranty states
-  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'warranty'>('details');
+  // History, Warranty & QR states
+  const [activeTab, setActiveTab] = useState<'details' | 'history' | 'warranty' | 'qr'>('details');
   const [assetWarranties, setAssetWarranties] = useState<any[]>([]);
   const [warrantyLoading, setWarrantyLoading] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'timeline' | 'table'>('timeline');
@@ -91,6 +95,16 @@ export const AssetDetail: React.FC = () => {
     newHolderId: '',
   });
   const [correctionLoading, setCorrectionLoading] = useState<boolean>(false);
+
+  // QR Code States
+  const [activeQr, setActiveQr] = useState<any | null>(null);
+  const [qrHistory, setQrHistory] = useState<any[]>([]);
+  const [qrLoading, setQrLoading] = useState<boolean>(false);
+  const [showReplaceModal, setShowReplaceModal] = useState<boolean>(false);
+  const [showRevokeModal, setShowRevokeModal] = useState<boolean>(false);
+  const [replaceReason, setReplaceReason] = useState<string>('');
+  const [revokeReason, setRevokeReason] = useState<string>('');
+  const [qrActionLoading, setQrActionLoading] = useState<boolean>(false);
 
   // Modals
   const [showAssignModal, setShowAssignModal] = useState<boolean>(false);
@@ -226,10 +240,127 @@ export const AssetDetail: React.FC = () => {
     }
   };
 
+  const fetchAssetQrs = async () => {
+    if (!id) return;
+    try {
+      setQrLoading(true);
+      const res: any = await api.get(`/qr/asset/${id}`);
+      if (res?.data?.success || res?.success) {
+        const payload = res?.data?.data || res?.data || {};
+        setActiveQr(payload.activeQr || null);
+        setQrHistory(payload.history || []);
+      }
+    } catch (err) {
+      console.error('Failed to load asset QR codes', err);
+    } finally {
+      setQrLoading(false);
+    }
+  };
+
+  const handleGenerateQr = async () => {
+    if (!id) return;
+    try {
+      setQrActionLoading(true);
+      const res: any = await api.post('/qr/generate', { assetId: id });
+      if (res?.data?.success || res?.success) {
+        showToast('Active QR code generated successfully.', 'success');
+        fetchAssetQrs();
+      }
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || 'Failed to generate QR code.', 'error');
+    } finally {
+      setQrActionLoading(false);
+    }
+  };
+
+  const handleReplaceQrSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      setQrActionLoading(true);
+      const res: any = await api.post('/qr/replace', { assetId: id, reason: replaceReason });
+      if (res?.data?.success || res?.success) {
+        showToast('QR code replaced with new active tag.', 'success');
+        setShowReplaceModal(false);
+        setReplaceReason('');
+        fetchAssetQrs();
+      }
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || 'Failed to replace QR code.', 'error');
+    } finally {
+      setQrActionLoading(false);
+    }
+  };
+
+  const handleRevokeQrSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id) return;
+    try {
+      setQrActionLoading(true);
+      const res: any = await api.post('/qr/revoke', { assetId: id, reason: revokeReason });
+      if (res?.data?.success || res?.success) {
+        showToast('QR code revoked.', 'success');
+        setShowRevokeModal(false);
+        setRevokeReason('');
+        fetchAssetQrs();
+      }
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || 'Failed to revoke QR code.', 'error');
+    } finally {
+      setQrActionLoading(false);
+    }
+  };
+
+  const handlePrintBadge = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast('Pop-up blocked. Please allow pop-ups to print QR badge.', 'error');
+      return;
+    }
+
+    const canvas = document.getElementById('asset-detail-qr-canvas') as HTMLCanvasElement;
+    const qrDataUrl = canvas ? canvas.toDataURL() : '';
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Asset QR Badge - ${asset?.companyAssetId || asset?.assetCode}</title>
+          <style>
+            @page { size: A4; margin: 10mm; }
+            body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #000; background: #fff; }
+            .badge-card { width: 320px; border: 2px solid #000; border-radius: 8px; padding: 16px; margin: 20px auto; text-align: center; }
+            .org-title { font-size: 14px; font-weight: bold; letter-spacing: 1px; margin-bottom: 2px; }
+            .dept-title { font-size: 10px; color: #555; text-transform: uppercase; margin-bottom: 12px; }
+            .qr-img { width: 180px; height: 180px; margin: 0 auto; display: block; }
+            .asset-code { font-size: 18px; font-weight: bold; font-family: monospace; margin-top: 10px; }
+            .model-info { font-size: 11px; margin-top: 4px; color: #333; }
+            .token-info { font-size: 8px; font-family: monospace; color: #777; margin-top: 8px; word-break: break-all; }
+          </style>
+        </head>
+        <body>
+          <div class="badge-card">
+            <div class="org-title">FAITH AUTOMATION</div>
+            <div class="dept-title">IT ASSET TRACKING SYSTEM</div>
+            <img src="${qrDataUrl}" class="qr-img" />
+            <div class="asset-code">${asset?.companyAssetId || asset?.assetCode}</div>
+            <div class="model-info">${asset?.manufacturer || ''} ${asset?.model || ''} (${asset?.assetType || 'ASSET'})</div>
+            <div class="token-info">${activeQr?.token || ''}</div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); setTimeout(function() { window.close(); }, 500); };
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   useEffect(() => {
     fetchAsset();
     fetchHistorySummary();
     fetchAssetWarranties();
+    fetchAssetQrs();
 
     const fetchEmps = async () => {
       try {
@@ -835,6 +966,26 @@ export const AssetDetail: React.FC = () => {
           {assetWarranties.length > 0 && (
             <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono">
               {assetWarranties.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('qr')}
+          className={`px-4 py-2.5 text-xs font-bold rounded-t-lg transition-all flex items-center gap-1.5 ${
+            activeTab === 'qr'
+              ? 'bg-bgElevated text-cyan-400 border-t-2 border-cyan-400 border-x border-borderBase'
+              : 'text-textSecondary hover:text-textPrimary hover:bg-bgElevated/40'
+          }`}
+        >
+          <ScanLine className="w-3.5 h-3.5 text-cyan-400" />
+          QR & Security Gate
+          {activeQr ? (
+            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono">
+              ACTIVE
+            </span>
+          ) : (
+            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-950 text-amber-300 border border-amber-800 font-mono">
+              NO QR
             </span>
           )}
         </button>
@@ -1836,6 +1987,206 @@ export const AssetDetail: React.FC = () => {
         </div>
       )}
 
+      {/* ══ TAB 4: QR & SECURITY GATE TRACKING ══ */}
+      {activeTab === 'qr' && (
+        <div className="space-y-6">
+          {activeQr ? (
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+              {/* Badge Preview & Printable Card */}
+              <div className="md:col-span-5 bg-[#0E131F] border border-[#1E2535] rounded-xl p-5 flex flex-col items-center justify-center space-y-4 shadow-xl">
+                <div className="text-center">
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-400">
+                    Physical QR Identity Badge
+                  </span>
+                  <p className="text-xs text-slate-400 mt-0.5">High-resolution scannable token tag</p>
+                </div>
+
+                <div className="bg-white p-4 rounded-xl shadow-lg border border-slate-300 flex flex-col items-center max-w-[240px]">
+                  <span className="text-[11px] font-black tracking-widest text-slate-900 mb-1">
+                    FAITH AUTOMATION
+                  </span>
+                  <span className="text-[8px] font-bold text-slate-600 uppercase mb-2">
+                    IT ASSET INVENTORY
+                  </span>
+                  <QRCodeCanvas
+                    id="asset-detail-qr-canvas"
+                    value={activeQr.token}
+                    size={170}
+                    level="H"
+                    includeMargin={false}
+                  />
+                  <div className="text-sm font-black font-mono text-slate-950 mt-2.5 tracking-tight text-center">
+                    {asset.companyAssetId || asset.assetCode}
+                  </div>
+                  <div className="text-[10px] font-semibold text-slate-700 text-center truncate max-w-[210px]">
+                    {asset.manufacturer} {asset.model}
+                  </div>
+                  <div className="text-[7.5px] font-mono text-slate-500 mt-1.5 break-all text-center">
+                    {activeQr.token}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handlePrintBadge}
+                  className="w-full max-w-[240px] py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Print QR Sticker Badge
+                </button>
+              </div>
+
+              {/* Tag Details & Actions */}
+              <div className="md:col-span-7 bg-[#0E131F] border border-[#1E2535] rounded-xl p-5 space-y-5 shadow-xl">
+                <div className="flex items-center justify-between pb-3 border-b border-[#1E2535]">
+                  <div className="flex items-center gap-2">
+                    <ScanLine className="w-4 h-4 text-cyan-400" />
+                    <h3 className="text-sm font-bold text-white">Active Tag Configuration</h3>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    STATUS: ACTIVE
+                  </span>
+                </div>
+
+                {/* Gate Presence Card */}
+                <div
+                  className={`p-4 rounded-xl border flex items-center justify-between ${
+                    asset.gatePresence === 'OUTSIDE'
+                      ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                      : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <ShieldCheck className="w-6 h-6 shrink-0 text-cyan-400" />
+                    <div>
+                      <div className="text-[10px] font-mono uppercase font-bold tracking-wider opacity-80">
+                        Physical Gate Presence
+                      </div>
+                      <div className="text-sm font-bold">
+                        {asset.gatePresence === 'OUTSIDE'
+                          ? 'CURRENTLY OUTSIDE PREMISES'
+                          : 'VERIFIED INSIDE PREMISES'}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => navigate('/security-gate')}
+                    className="text-xs underline font-semibold hover:opacity-80"
+                  >
+                    View in Gate Console &rarr;
+                  </button>
+                </div>
+
+                {/* Tag Metadata Grid */}
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  <div className="bg-[#121624] p-3 rounded-lg border border-[#1E2535]">
+                    <span className="text-[10px] font-mono text-slate-400 uppercase block">Unique Safe Token</span>
+                    <span className="font-mono text-cyan-400 font-bold break-all block mt-0.5">
+                      {activeQr.token}
+                    </span>
+                  </div>
+
+                  <div className="bg-[#121624] p-3 rounded-lg border border-[#1E2535]">
+                    <span className="text-[10px] font-mono text-slate-400 uppercase block">Generated At</span>
+                    <span className="font-mono text-slate-200 block mt-0.5">
+                      {new Date(activeQr.generatedAt).toLocaleString()}
+                    </span>
+                    {activeQr.generatedBy && (
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        By: {activeQr.generatedBy.username}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Replace / Revoke Actions */}
+                <div className="pt-2 border-t border-[#1E2535] flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setShowReplaceModal(true)}
+                    className="px-4 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Replace Damaged Tag
+                  </button>
+
+                  <button
+                    onClick={() => setShowRevokeModal(true)}
+                    className="px-4 py-2 bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  >
+                    <ShieldX className="w-3.5 h-3.5" />
+                    Revoke QR Code
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-12 text-center bg-[#0E131F] border border-[#1E2535] rounded-xl space-y-4">
+              <ScanLine className="w-12 h-12 text-slate-600 mx-auto" />
+              <h3 className="text-base font-bold text-white">No Active QR Code Assigned</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto">
+                This asset does not yet have an active QR code identity tag. Generate an opaque safe token to enable physical security gate tracking.
+              </p>
+              <button
+                onClick={handleGenerateQr}
+                disabled={qrActionLoading}
+                className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-lg text-xs inline-flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                {qrActionLoading ? 'Generating...' : 'Generate Active QR Code'}
+              </button>
+            </div>
+          )}
+
+          {/* Historical Tag Audit Table */}
+          {qrHistory.length > 0 && (
+            <div className="bg-[#0E131F] border border-[#1E2535] rounded-xl p-5 space-y-3 shadow-xl">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+                Historical / Decommissioned QR Tags ({qrHistory.length})
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#1E2535] text-slate-400 font-mono text-[10px] uppercase">
+                      <th className="p-2.5">Status</th>
+                      <th className="p-2.5">Token</th>
+                      <th className="p-2.5">Generated At</th>
+                      <th className="p-2.5">Revoked / Replaced At</th>
+                      <th className="p-2.5">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#1A2234]">
+                    {qrHistory.map((q) => (
+                      <tr key={q.id} className="hover:bg-[#121624] text-slate-300">
+                        <td className="p-2.5">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                              q.status === 'REPLACED'
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                            }`}
+                          >
+                            {q.status}
+                          </span>
+                        </td>
+                        <td className="p-2.5 font-mono text-slate-400">{q.token}</td>
+                        <td className="p-2.5 font-mono">{new Date(q.generatedAt).toLocaleDateString()}</td>
+                        <td className="p-2.5 font-mono">
+                          {q.revokedAt
+                            ? new Date(q.revokedAt).toLocaleDateString()
+                            : q.replacedAt
+                            ? new Date(q.replacedAt).toLocaleDateString()
+                            : 'N/A'}
+                        </td>
+                        <td className="p-2.5 text-slate-400">{q.replacementReason || q.revocationReason || 'N/A'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Assignment Modal */}
       {showAssignModal && (
         <Modal isOpen={showAssignModal} onClose={() => setShowAssignModal(false)} title="Assign Asset to Employee">
@@ -2331,6 +2682,51 @@ export const AssetDetail: React.FC = () => {
           </form>
         </Modal>
       )}
+
+      {/* Replace QR Modal */}
+      {showReplaceModal && (
+        <Modal isOpen={showReplaceModal} onClose={() => setShowReplaceModal(false)} title="Replace Asset QR Code">
+          <form onSubmit={handleReplaceQrSubmit} className="space-y-4 text-xs">
+            <p className="text-slate-300">
+              The existing active QR code will be marked as <strong>REPLACED</strong> and immediately deactivated. A new unique active QR code will be generated.
+            </p>
+            <Input
+              label="Replacement Reason *"
+              value={replaceReason}
+              onChange={(e) => setReplaceReason(e.target.value)}
+              placeholder="e.g. Physical sticker damaged, faded or scratched"
+              required
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setShowReplaceModal(false)}>Cancel</Button>
+              <Button variant="primary" type="submit" loading={qrActionLoading}>Confirm & Issue New QR</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Revoke QR Modal */}
+      {showRevokeModal && (
+        <Modal isOpen={showRevokeModal} onClose={() => setShowRevokeModal(false)} title="Revoke Asset QR Code">
+          <form onSubmit={handleRevokeQrSubmit} className="space-y-4 text-xs">
+            <p className="text-rose-300">
+              Revoking this QR tag will prohibit security guards from scanning it at physical gates.
+            </p>
+            <Input
+              label="Revocation Reason *"
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              placeholder="e.g. Asset decommissioned, lost tag, or security investigation"
+              required
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="secondary" onClick={() => setShowRevokeModal(false)}>Cancel</Button>
+              <Button variant="danger" type="submit" loading={qrActionLoading}>Revoke Tag</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };
+

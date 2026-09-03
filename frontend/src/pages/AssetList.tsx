@@ -33,6 +33,7 @@ import {
   Layers,
   Wrench,
   ShieldAlert,
+  ScanLine,
 } from 'lucide-react';
 
 const COLUMN_STORAGE_KEY = 'itam_inventory_columns_v2';
@@ -53,6 +54,8 @@ const DEFAULT_COLUMNS_VISIBILITY: Record<string, boolean> = {
   ram: true,
   cpu: true,
   dataQuality: true,
+  qrCode: true,
+  gatePresence: true,
   actions: true,
 };
 
@@ -380,7 +383,40 @@ export const AssetList: React.FC = () => {
     addToast(`Exported ${selectedList.length} selected assets to Excel.`, 'success');
   };
 
+  // Bulk update multiple selected assets (Step 15)
+  const handleBulkUpdate = async (updates: any) => {
+    if (selectedAssetIds.length === 0) return;
+    try {
+      const res: any = await api.post('/bulk/assets/update', {
+        assetIds: selectedAssetIds,
+        updates,
+      });
+      addToast(res?.message || `Successfully updated ${selectedAssetIds.length} assets`, 'success');
+      setSelectedAssetIds([]);
+      fetchAssets(pagination.page, pagination.limit);
+      fetchCounts();
+    } catch (err: any) {
+      addToast(err.response?.data?.message || err.message || 'Failed to execute bulk update', 'error');
+    }
+  };
+
+  const handleBulkGenerateQrs = async () => {
+    if (selectedAssetIds.length === 0) return;
+    try {
+      const res: any = await api.post('/qr/bulk-generate', { assetIds: selectedAssetIds });
+      const isSuccess = res?.success ?? res?.data?.success;
+      const count = res?.data?.totalCreated ?? res?.data?.data?.totalCreated ?? 0;
+      if (isSuccess) {
+        addToast(`Successfully generated ${count} QR codes for selected assets.`, 'success');
+        fetchAssets(pagination.page, pagination.limit);
+      }
+    } catch (err: any) {
+      addToast(err?.response?.data?.message || 'Failed to bulk generate QR codes.', 'error');
+    }
+  };
+
   // Safe Deactivate / Delete Asset Workflow
+
   const handleConfirmDeactivate = async () => {
     if (!assetToDelete) return;
     setActionLoading(true);
@@ -562,6 +598,26 @@ export const AssetList: React.FC = () => {
             }`}
           >
             {item.sourceAllocationStatus || (isAlloc ? 'Allocated' : 'Not Allocated')}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'gatePresence',
+      header: 'Gate State',
+      sortable: false,
+      className: 'w-24 min-w-[90px]',
+      render: (item) => {
+        const isOutside = item.gatePresence === 'OUTSIDE';
+        return (
+          <span
+            className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold whitespace-nowrap ${
+              isOutside
+                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+            }`}
+          >
+            {isOutside ? 'OUTSIDE' : 'INSIDE'}
           </span>
         );
       },
@@ -1271,6 +1327,35 @@ export const AssetList: React.FC = () => {
 
           <div className="h-4 w-px bg-borderBase" />
 
+          <div className="flex items-center gap-2">
+            <select
+              onChange={(e) => {
+                if (e.target.value) handleBulkUpdate({ status: e.target.value });
+                e.target.value = '';
+              }}
+              className="bg-bgBase border border-borderBase rounded-lg px-2.5 py-1 text-xs text-textSecondary focus:outline-none focus:border-brandPrimary"
+            >
+              <option value="">Bulk Status...</option>
+              <option value="AVAILABLE">Mark Available</option>
+              <option value="UNDER_REPAIR">Mark Under Repair</option>
+              <option value="INACTIVE">Mark Inactive</option>
+              <option value="SCRAPPED">Mark Scrapped</option>
+            </select>
+
+            <select
+              onChange={(e) => {
+                if (e.target.value) handleBulkUpdate({ criticality: e.target.value });
+                e.target.value = '';
+              }}
+              className="bg-bgBase border border-borderBase rounded-lg px-2.5 py-1 text-xs text-textSecondary focus:outline-none focus:border-brandPrimary"
+            >
+              <option value="">Bulk Criticality...</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+          </div>
+
           <Button
             variant="secondary"
             size="sm"
@@ -1279,6 +1364,16 @@ export const AssetList: React.FC = () => {
           >
             <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
             Export Selected ({selectedAssetIds.length})
+          </Button>
+
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleBulkGenerateQrs}
+            className="text-xs text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10"
+          >
+            <ScanLine className="w-3.5 h-3.5 mr-1.5 text-cyan-400" />
+            Bulk Generate QRs
           </Button>
 
           <Button
@@ -1291,6 +1386,7 @@ export const AssetList: React.FC = () => {
           </Button>
         </div>
       )}
+
 
       {/* Controlled Deactivate / Delete Modal */}
       {assetToDelete && (

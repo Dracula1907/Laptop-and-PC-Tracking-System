@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Faith IT Inventory",
+    "slug": "faith-itam-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "faith-itam",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0D14"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0D14"
+      },
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Faith Automation IT Inventory requires camera access to scan physical asset QR identity tags at security gates."
+        }
+      ],
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

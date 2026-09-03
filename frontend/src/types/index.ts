@@ -238,6 +238,7 @@ export interface Asset {
 
   holderType?: HolderType;
   holderDisplayName?: string;
+  gatePresence?: 'INSIDE' | 'OUTSIDE';
   holderVerificationStatus?: HolderVerificationStatus;
 
   dataQualityStatus?: DataQualityStatus;
@@ -669,12 +670,19 @@ export interface AuditLog {
 export interface Notification {
   id: string;
   userId: string;
+  category: NotificationCategory;
   type: string;
+  priority: NotificationPriority;
   title: string;
   message: string;
   entityType?: string;
   entityId?: string;
+  assetId?: string;
+  actionRoute?: string;
   isRead: boolean;
+  readAt?: string;
+  expiresAt?: string;
+  metadata?: string;
   createdAt: string;
 }
 
@@ -933,6 +941,501 @@ export interface WarrantyCounts {
   openClaims: number;
   resolvedClaims: number;
 }
+
+// ----------------------------------------------------
+// STEP 11: NOTIFICATIONS & ALERTS
+// ----------------------------------------------------
+export type NotificationCategory =
+  | 'APPROVAL'
+  | 'ASSIGNMENT'
+  | 'TRANSFER'
+  | 'RETURN'
+  | 'MAINTENANCE'
+  | 'WARRANTY'
+  | 'DATA_QUALITY'
+  | 'EMPLOYEE'
+  | 'RETIREMENT'
+  | 'REPLACEMENT'
+  | 'BULK_OPERATION'
+  | 'DOCUMENT'
+  | 'ASSET'
+  | 'SYSTEM';
+
+export type NotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL';
+
+
+
+export interface NotificationPreference {
+  category: NotificationCategory;
+  inAppEnabled: boolean;
+  emailEnabled: boolean;
+}
+
+// ----------------------------------------------------
+// STEP 12: REPORTS & MANAGEMENT ANALYTICS
+// ----------------------------------------------------
+export interface ManagementKPIs {
+  totalAssets: number;
+  allocatedAssets: number;
+  unallocatedAssets: number;
+  activeAssets: number;
+  inactiveAssets: number;
+  underMaintenance: number;
+  overdueReturns: number;
+  warrantyExpiring: number;
+  criticalDataQuality: number;
+  activeClearances: number;
+  retiredAssets: number;
+  timestamp: string;
+}
+
+export interface AssetAnalyticsData {
+  byType: { type: string; count: number }[];
+  byStatus: { status: string; count: number }[];
+  byAllocation: { allocation: string; count: number }[];
+  byCriticality: { criticality: string; count: number }[];
+  byDepartment: { id: string; name: string; code: string; count: number }[];
+  byLocation: { id: string; name: string; code: string; count: number }[];
+}
+
+export interface UtilizationData {
+  formula: string;
+  totalEligible: number;
+  allocatedEligible: number;
+  overallRate: number;
+  byType: { assetType: string; total: number; allocated: number; utilizationRate: number }[];
+}
+
+export interface EmployeeAccountabilityItem {
+  id: string;
+  employeeCode: string;
+  fullName: string;
+  email: string;
+  department: string;
+  location: string;
+  status: string;
+  assetsHeld: number;
+  activeAssignments: number;
+  overdueAssignments: number;
+  hasClearance: boolean;
+}
+
+export interface OverdueReturnItem {
+  id: string;
+  assignmentCode?: string;
+  assetCode: string;
+  assetName: string;
+  assetType: string;
+  employeeName: string;
+  employeeCode: string;
+  department: string;
+  location: string;
+  assignedAt: string;
+  expectedReturnDate: string;
+  daysOverdue: number;
+  criticality: string;
+}
+
+export interface MaintenanceAnalyticsData {
+  byStatus: { status: string; count: number }[];
+  byPriority: { priority: string; count: number }[];
+  byType: { type: string; count: number }[];
+  costs: {
+    totalTickets: number;
+    laborCost: number;
+    partsCost: number;
+    serviceCost: number;
+    otherCost: number;
+    totalCost: number;
+    avgCost: number;
+  };
+}
+
+export interface WarrantyAnalyticsData {
+  activeWarranties: number;
+  expiring7Days: number;
+  expiring30Days: number;
+  expiring60Days: number;
+  expiring90Days: number;
+  expiredWarranties: number;
+  claims: {
+    totalClaims: number;
+    totalClaimCost: number;
+    coveredAmount: number;
+    outOfPocketAmount: number;
+  };
+}
+
+export interface AgingBracket {
+  bracket: string;
+  count: number;
+}
+
+export interface AssetHealthItem {
+  id: string;
+  assetCode: string;
+  assetName: string;
+  assetType: string;
+  status: string;
+  condition: string;
+  criticality: string;
+  category: 'HEALTHY' | 'ATTENTION' | 'HIGH RISK';
+  riskScore: number;
+  issues: string[];
+}
+
+export interface SavedReport {
+  id: string;
+  name: string;
+  description?: string;
+  reportType: string;
+  filters: string;
+  sortBy?: string;
+  sortOrder?: string;
+  createdAt: string;
+}
+
+// ----------------------------------------------------
+// STEP 13: EMPLOYEE EXIT & CLEARANCE
+// ----------------------------------------------------
+export type ClearanceStatus =
+  | 'NOT_STARTED'
+  | 'IN_PROGRESS'
+  | 'PENDING_REVIEW'
+  | 'PENDING_APPROVAL'
+  | 'CLEARED'
+  | 'BLOCKED'
+  | 'CANCELLED';
+
+export type ClearanceAction =
+  | 'RETURN'
+  | 'TRANSFER'
+  | 'RETAIN_EXCEPTION'
+  | 'MISSING'
+  | 'DAMAGED'
+  | 'MAINTENANCE_REQUIRED';
+
+export interface ClearanceItem {
+  id: string;
+  clearanceId: string;
+  assetId: string;
+  asset: Asset;
+  assignmentId: string;
+  assignment?: AssetAssignment;
+  action: ClearanceAction;
+  status: 'PENDING' | 'RESOLVED' | 'BLOCKED';
+  returnId?: string | null;
+  transferId?: string | null;
+  maintenanceId?: string | null;
+  conditionAtClearance?: AssetCondition | null;
+  damageDescription?: string | null;
+  missingAccessories?: string | null;
+  exceptionReason?: string | null;
+  resolutionNotes?: string | null;
+  resolvedById?: string | null;
+  resolvedAt?: string | null;
+}
+
+export interface Clearance {
+  id: string;
+  clearanceCode: string;
+  employee: {
+    id: string;
+    employeeCode: string;
+    fullName: string;
+    department?: string;
+    location?: string;
+  };
+  exitDate: string;
+  initiatedDate: string;
+  status: ClearanceStatus;
+  reason?: string;
+  notes?: string;
+  totalItems: number;
+  resolvedItems: number;
+  outstandingItems: number;
+  initiatedBy: string;
+  approvedBy?: string;
+  completedDate?: string | null;
+  items?: ClearanceItem[];
+}
+
+// ----------------------------------------------------
+// STEP 14: DOCUMENT MANAGEMENT
+// ----------------------------------------------------
+export type DocumentType = 'HANDOVER' | 'TRANSFER' | 'RETURN_RECEIPT' | 'CLEARANCE' | 'RETIREMENT';
+export type DocumentStatus = 'DRAFT' | 'FINAL' | 'VOIDED' | 'SUPERSEDED';
+
+export interface OfficialDocument {
+  id: string;
+  documentNumber: string;
+  documentType: DocumentType;
+  relatedEntityType: string;
+  relatedEntityId: string;
+  assetId?: string | null;
+  asset?: { assetCode: string; model: string } | null;
+  employeeId?: string | null;
+  employee?: { employeeCode: string; fullName: string } | null;
+  generatedById: string;
+  generatedBy: { username: string };
+  generatedAt: string;
+  version: number;
+  status: DocumentStatus;
+  fileReference?: string | null;
+  fileHash?: string | null;
+  snapshotData: string;
+  parsedSnapshot?: any;
+  remarks?: string | null;
+  createdAt: string;
+}
+
+// ----------------------------------------------------
+// STEP 15: BULK OPERATIONS & EXCEL IMPORT
+// ----------------------------------------------------
+export interface StagedRow {
+  rowNumber: number;
+  assetCode: string;
+  isNew: boolean;
+  existingId?: string | null;
+  status: 'VALID' | 'WARNING' | 'ERROR';
+  errors: string[];
+  warnings: string[];
+  changes: Record<string, { oldVal: any; newVal: any }>;
+  rawData: any;
+}
+
+export interface ImportStageResult {
+  batchId: string;
+  fileName: string;
+  totalRows: number;
+  validRows: number;
+  warningRows: number;
+  errorRows: number;
+  newCount: number;
+  updatedCount: number;
+  unchangedCount: number;
+  preview: StagedRow[];
+}
+
+export interface ImportBatchItem {
+  id: string;
+  fileName: string;
+  entityType: string;
+  mode: string;
+  uploadedAt: string;
+  uploadedBy?: { username: string };
+  totalRows: number;
+  validRows: number;
+  errorRows: number;
+  importedRows: number;
+  status: string;
+  rollbackStatus: string;
+}
+
+// ----------------------------------------------------
+// STEP 16: RETIREMENT & REPLACEMENT
+// ----------------------------------------------------
+export type RetirementReason =
+  | 'END_OF_LIFE'
+  | 'OBSOLETE'
+  | 'REPEATED_FAILURE'
+  | 'SEVERE_DAMAGE'
+  | 'UNECONOMICAL_TO_REPAIR'
+  | 'SECURITY_SUPPORT_END'
+  | 'WARRANTY_EXPIRED'
+  | 'PERFORMANCE'
+  | 'LOST_OR_UNRECOVERED'
+  | 'OTHER';
+
+export type RetirementStatus =
+  | 'PROPOSED'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export type DisposalMethod =
+  | 'ELECTRONIC_WASTE_RECYCLER'
+  | 'DONATION'
+  | 'BUYBACK'
+  | 'SCRAP'
+  | 'INTERNAL_REPURPOSE'
+  | 'OTHER';
+
+export type DataSanitizationStatus = 'NOT_REQUIRED' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'VERIFIED';
+export type ReplacementStatus = 'NOT_REQUIRED' | 'RECOMMENDED' | 'REQUESTED' | 'REPLACED' | 'DEFERRED';
+
+export interface RetirementCandidate {
+  assetId: string;
+  assetCode: string;
+  assetName: string;
+  assetType: string;
+  serialNumber?: string;
+  department: string;
+  location: string;
+  currentHolder?: string | null;
+  allocationStatus: string;
+  status: string;
+  condition: string;
+  criticality: string;
+  ageYears: string;
+  maintenanceCount: number;
+  maintenanceCost: number;
+  warrantyStatus: string;
+  recommendation: 'RETAIN' | 'REVIEW_RECOMMENDED' | 'REPLACEMENT_RECOMMENDED';
+  reasons: string[];
+}
+
+export interface RetirementRecord {
+  id: string;
+  retirementCode: string;
+  asset: {
+    assetCode: string;
+    model: string;
+    assetType: string;
+    serialNumber?: string;
+  };
+  status: RetirementStatus;
+  reason: RetirementReason;
+  overrideReason?: string;
+  requestedDate: string;
+  retirementDate?: string;
+  requestedBy: { username: string };
+  approvedBy?: { username: string };
+  replacementAsset?: { assetCode: string; model: string };
+}
+
+// ─── QR & Security Gate Tracking Types ─────────────────────────────────────
+export type GatePresence = 'INSIDE' | 'OUTSIDE';
+export type GateMovementType = 'OUT' | 'IN';
+export type GateMovementStatus = 'OPEN' | 'COMPLETED' | 'CANCELLED';
+export type QrCodeStatus = 'ACTIVE' | 'REVOKED' | 'REPLACED';
+
+export interface GateMaster {
+  id: string;
+  name: string;
+  code: string;
+  location?: string | null;
+  status: string;
+  _count?: {
+    movements: number;
+  };
+}
+
+export interface AssetQrCodeRecord {
+  id: string;
+  assetId: string;
+  token: string;
+  status: QrCodeStatus;
+  generatedAt: string;
+  generatedBy?: { id: string; username: string };
+  revokedAt?: string | null;
+  revokedBy?: { id: string; username: string } | null;
+  revocationReason?: string | null;
+  replacedAt?: string | null;
+  replacedBy?: { id: string; username: string } | null;
+  replacementReason?: string | null;
+}
+
+export interface GateMovementRecord {
+  id: string;
+  movementCode: string;
+  assetId: string;
+  asset?: {
+    id: string;
+    assetCode: string;
+    companyAssetId?: string;
+    assetName?: string;
+    model: string;
+    assetType: string;
+    gatePresence: GatePresence;
+  };
+  qrCodeId?: string | null;
+  movementType: GateMovementType;
+  movementDateTime: string;
+  gateId?: string | null;
+  gate?: { id: string; name: string; code: string } | null;
+  guardUserId?: string | null;
+  guardUser?: { id: string; username: string } | null;
+  employeeId?: string | null;
+  employee?: { id: string; employeeCode: string; fullName: string } | null;
+  departmentId?: string | null;
+  department?: { id: string; name: string; code?: string } | null;
+  locationId?: string | null;
+  location?: { id: string; name: string; code?: string } | null;
+  destination?: string | null;
+  purpose?: string | null;
+  expectedReturn?: string | null;
+  actualReturn?: string | null;
+  relatedMovementId?: string | null;
+  relatedMovement?: { id: string; movementCode: string; movementDateTime: string } | null;
+  remarks?: string | null;
+  status: GateMovementStatus;
+}
+
+export interface GateKPIs {
+  assetsOutside: number;
+  assetsInside: number;
+  todayOut: number;
+  todayIn: number;
+  overdueReturns: number;
+  totalMovements: number;
+}
+
+export interface CurrentOutsideItem {
+  id?: string;
+  movementId?: string;
+  assetId: string;
+  assetCode: string;
+  assetName: string;
+  assetType: string;
+  model: string;
+  holderName: string;
+  department: string;
+  location: string;
+  movementCode: string;
+  outDateTime: string | null;
+  gateName: string;
+  guardName: string;
+  destination: string;
+  purpose: string;
+  expectedReturn: string | null;
+  durationHours: number;
+  isOverdue: boolean;
+  remarks: string;
+}
+
+
+export interface ScannedAssetData {
+  qrId: string;
+  token: string;
+  qrStatus: QrCodeStatus;
+  assetId: string;
+  assetCode: string;
+  assetName: string;
+  assetType: string;
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  currentHolder: string;
+  employeeCode?: string | null;
+  department: string;
+  location: string;
+  gatePresence: GatePresence;
+  openOutMovement?: {
+    id: string;
+    movementCode: string;
+    movementDateTime: string;
+    gateName: string;
+    destination: string;
+    purpose: string;
+    expectedReturn?: string | null;
+    remarks?: string | null;
+    guardName: string;
+  } | null;
+}
+
 
 
 

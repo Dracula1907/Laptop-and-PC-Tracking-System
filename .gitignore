@@ -8,11 +8,13 @@ node_modules/
 .env.*
 !.env.example
 
-# Build outputs
+# Build outputs & Expo
 dist/
 **/dist/
 build/
 *.tsbuildinfo
+.expo/
+**/.expo/
 
 # Database & Embedded Postgres
 .pgdata/

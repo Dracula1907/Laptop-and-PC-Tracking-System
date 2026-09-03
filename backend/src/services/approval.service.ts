@@ -9,8 +9,10 @@ import {
   AssetAction,
   WorkflowStatus,
   MaintenanceStatus,
+  RetirementStatus,
   Prisma,
 } from '@prisma/client';
+
 import { HistoryService } from './history.service';
 import { ApprovalPolicyService } from './approval-policy.service';
 
@@ -409,8 +411,11 @@ export class ApprovalService {
   public static async approveRequest(
     id: string,
     data: { comment?: string },
-    user: { id: string; role?: { code: string }; username: string }
+    user: any
   ) {
+    const effectiveUserId = user?.userId || user?.id;
+
+
     return await prisma.$transaction(async (tx) => {
       // 1. Concurrency Check
       const request = await tx.approvalRequest.findUnique({
@@ -429,9 +434,10 @@ export class ApprovalService {
 
       // 2. Self-Approval Protection
       const policy = await ApprovalPolicyService.getPolicy(request.requestType);
-      if (request.requestedById === user.id && !policy?.allowSelfApproval) {
+      if (request.requestedById === effectiveUserId && !policy?.allowSelfApproval) {
         throw new Error('You cannot approve your own request.');
       }
+
 
       // 3. Stale Request Protection
       if (request.assetId && request.expectedSourceState && request.asset) {
@@ -525,7 +531,7 @@ export class ApprovalService {
           newHolderName: employee.fullName,
           newDepartmentId: departmentId || employee.departmentId,
           newLocationId: locationId || employee.locationId,
-          performedById: user.id,
+          performedById: effectiveUserId,
           eventDate: now,
           remarks: `Assignment approved via request ${request.requestCode}`,
         });
@@ -620,7 +626,7 @@ export class ApprovalService {
           newDepartmentId: newDepartmentId || null,
           previousLocationId: request.asset?.locationId || null,
           newLocationId: newLocationId || null,
-          performedById: user.id,
+          performedById: effectiveUserId,
           eventDate: now,
           remarks: `Transfer approved via request ${request.requestCode}`,
         });
@@ -646,18 +652,25 @@ export class ApprovalService {
           action: AssetAction.RETIRED,
           previousStatus: request.asset?.status,
           newStatus: AssetStatus.RETIRED,
-          performedById: user.id,
+          performedById: effectiveUserId,
           eventDate: now,
           remarks: `Asset retired/deactivated via approval ${request.requestCode}: ${data.comment || request.reason || ''}`,
         });
+
+        // Update linked Retirement record status
+        await tx.retirement.updateMany({
+          where: { approvalRequestId: request.id },
+          data: { status: RetirementStatus.APPROVED },
+        });
       }
+
 
       // 6. Update Approval Request State
       const updatedRequest = await tx.approvalRequest.update({
         where: { id },
         data: {
           status: ApprovalStatus.APPROVED,
-          decisionById: user.id,
+          decisionById: effectiveUserId,
           decisionAt: now,
           decisionComment: data.comment || null,
         },
@@ -669,7 +682,7 @@ export class ApprovalService {
           approvalRequestId: id,
           step: request.currentStep,
           action: 'APPROVED',
-          performedById: user.id,
+          performedById: effectiveUserId,
           comment: data.comment || 'Request reviewed and approved.',
         },
       });
@@ -679,7 +692,7 @@ export class ApprovalService {
           approvalRequestId: id,
           step: request.currentStep,
           action: 'EXECUTED',
-          performedById: user.id,
+          performedById: effectiveUserId,
           comment: 'Operation executed and state synchronized in inventory.',
         },
       });
@@ -699,7 +712,7 @@ export class ApprovalService {
       // 9. Audit Log
       await tx.auditLog.create({
         data: {
-          userId: user.id,
+          userId: effectiveUserId,
           action: 'REQUEST_APPROVED',
           entityType: 'ApprovalRequest',
           entityId: id,
@@ -710,6 +723,7 @@ export class ApprovalService {
           }),
         },
       });
+
 
       return updatedRequest;
     });

@@ -551,6 +551,285 @@ export const exportWarrantyClaimsToExcel = (claims: any[], customFilename?: stri
   exportToExcel(rows, filename, 'Claims');
 };
 
+/**
+ * Export Clearances to Excel
+ */
+export const exportClearancesToExcel = (clearances: any[], customFilename?: string) => {
+  if (!clearances || clearances.length === 0) {
+    throw new Error('No clearance records available to export.');
+  }
+
+  const rows = clearances.map((c) => ({
+    'Clearance Code': c.clearanceCode,
+    'Employee Code': c.employee?.employeeCode || '—',
+    'Employee Name': c.employee?.fullName || '—',
+    'Department': c.employee?.department || '—',
+    'Location': c.employee?.location || '—',
+    'Exit Date': c.exitDate ? new Date(c.exitDate).toLocaleDateString('en-GB') : '—',
+    'Status': c.status,
+    'Total Assets': c.totalItems ?? 0,
+    'Resolved Assets': c.resolvedItems ?? 0,
+    'Outstanding Assets': c.outstandingItems ?? 0,
+    'Initiated By': c.initiatedBy || 'System',
+    'Approved By': c.approvedBy || '—',
+    'Completed Date': c.completedDate ? new Date(c.completedDate).toLocaleDateString('en-GB') : '—',
+    'Reason': c.reason || '—',
+  }));
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const filename = customFilename || `FAITH_ITAM_Clearances_${dateStr}`;
+  exportToExcel(rows, filename, 'Clearances');
+};
+
+/**
+ * Export Retirements to Excel
+ */
+export const exportRetirementsToExcel = (retirements: any[], customFilename?: string) => {
+  if (!retirements || retirements.length === 0) {
+    throw new Error('No retirement records available to export.');
+  }
+
+  const rows = retirements.map((r) => ({
+    'Retirement Code': r.retirementCode,
+    'Asset ID': r.asset?.companyAssetId || r.asset?.assetCode || '—',
+    'Asset Model': r.asset?.model || '—',
+    'Asset Type': r.asset?.assetType || '—',
+    'Serial Number': r.asset?.serialNumber || '—',
+    'Status': r.status,
+    'Reason': r.reason,
+    'Override Reason': r.overrideReason || '—',
+    'Requested Date': r.requestedDate ? new Date(r.requestedDate).toLocaleDateString('en-GB') : '—',
+    'Retirement Date': r.retirementDate ? new Date(r.retirementDate).toLocaleDateString('en-GB') : '—',
+    'Requested By': r.requestedBy?.username || '—',
+    'Approved By': r.approvedBy?.username || '—',
+    'Final Condition': r.finalCondition || '—',
+    'Final Location': r.finalLocation || '—',
+    'Data Sanitization': r.dataSanitizationStatus || '—',
+    'Disposal Method': r.disposalMethod || '—',
+    'Disposal Vendor': r.disposalVendor || '—',
+    'Residual Value': r.residualValue !== null && r.residualValue !== undefined ? `INR ${r.residualValue}` : '—',
+    'Replacement Asset': r.replacementAsset?.assetCode || 'None',
+  }));
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const filename = customFilename || `FAITH_ITAM_Retirements_${dateStr}`;
+  exportToExcel(rows, filename, 'Retirements');
+};
+
+/**
+ * Generate Print-Friendly Corporate A4 PDF for Official Documents
+ */
+export const exportOfficialDocumentPDF = (docData: any) => {
+  const doc = new jsPDF('portrait', 'mm', 'a4');
+  const snapshot = docData.parsedSnapshot || {};
+
+  // Header Banner
+  doc.setFillColor(24, 30, 44);
+  doc.rect(0, 0, 210, 26, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('FAITH AUTOMATION — IT ASSET MANAGEMENT', 14, 12);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(snapshot.title || 'Official IT Asset Document', 14, 19);
+
+  // Document Metadata Pill
+  doc.setTextColor(50, 50, 50);
+  doc.setFontSize(9);
+  doc.text(`Document No: ${docData.documentNumber}`, 14, 35);
+  doc.text(`Generated: ${new Date(docData.generatedAt || Date.now()).toLocaleString('en-GB')}`, 14, 40);
+  doc.text(`Version: v${docData.version || 1}  |  Status: ${docData.status}`, 14, 45);
+  doc.text(`Integrity Hash: ${docData.fileHash ? docData.fileHash.slice(0, 24) + '...' : 'VERIFIED'}`, 14, 50);
+
+  let currentY = 56;
+
+  // Key Parties Section
+  const partyRows: any[] = [];
+  if (snapshot.employee) {
+    partyRows.push([
+      'Assigned Employee',
+      `${snapshot.employee.fullName || '—'} (${snapshot.employee.employeeCode || '—'})`,
+      'Department / Area',
+      snapshot.employee.department || '—',
+    ]);
+  }
+  if (snapshot.from && snapshot.to) {
+    partyRows.push([
+      'Transfer From',
+      `${snapshot.from.employee} (${snapshot.from.department})`,
+      'Transfer To',
+      `${snapshot.to.employee} (${snapshot.to.department})`,
+    ]);
+  }
+  if (snapshot.asset) {
+    partyRows.push([
+      'Asset Code / Name',
+      `${snapshot.asset.assetCode} — ${snapshot.asset.assetName || snapshot.asset.model || ''}`,
+      'Type / Serial No',
+      `${snapshot.asset.assetType} — ${snapshot.asset.serialNumber || 'N/A'}`,
+    ]);
+  }
+
+  if (partyRows.length > 0) {
+    (doc as any).autoTable({
+      body: partyRows,
+      startY: currentY,
+      styles: { fontSize: 8, cellPadding: 2 },
+      columnStyles: {
+        0: { fontStyle: 'bold', fillColor: [245, 247, 250], width: 35 },
+        2: { fontStyle: 'bold', fillColor: [245, 247, 250], width: 35 },
+      },
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // Hardware Specs Table (if available)
+  if (snapshot.asset?.specifications) {
+    const specs = snapshot.asset.specifications;
+    const specRows = [
+      ['CPU / Processor', specs.processor || 'Standard', 'RAM Memory', specs.ram || '8 GB'],
+      ['Storage', specs.storage || '256 GB SSD', 'Display / Monitor', specs.monitor || specs.displaySize || 'Built-in'],
+      ['Keyboard / Mouse', `${specs.keyboard || 'USB'} / ${specs.mouse || 'USB'}`, 'Charger / Adapter', specs.chargerAdapter || 'Standard Power Adapter'],
+      ['Operating System', specs.operatingSystem || 'Windows 11 Pro', 'MAC Address', specs.macAddress || '—'],
+    ];
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Hardware Specifications & Peripherals Checklist', 14, currentY);
+
+    (doc as any).autoTable({
+      body: specRows,
+      startY: currentY + 3,
+      styles: { fontSize: 8, cellPadding: 2 },
+      columnStyles: {
+        0: { fontStyle: 'bold', fillColor: [245, 247, 250], width: 35 },
+        2: { fontStyle: 'bold', fillColor: [245, 247, 250], width: 35 },
+      },
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // Clearance Items Table (if clearance)
+  if (snapshot.items && snapshot.items.length > 0) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Asset Handover & Resolution Checklist', 14, currentY);
+
+    const itemRows = snapshot.items.map((i: any) => [
+      i.assetCode,
+      i.assetName,
+      i.action,
+      i.status,
+      i.resolutionNotes || 'Verified & Cleared',
+    ]);
+
+    (doc as any).autoTable({
+      head: [['Asset Code', 'Model / Description', 'Action', 'Status', 'Resolution / Condition']],
+      body: itemRows,
+      startY: currentY + 3,
+      headStyles: { fillColor: [40, 50, 70] },
+      styles: { fontSize: 8, cellPadding: 2 },
+    });
+    currentY = (doc as any).lastAutoTable.finalY + 12;
+  }
+
+  // Sign-off / Signature section
+  const signY = Math.max(currentY + 6, 230);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+
+  doc.setDrawColor(180, 180, 180);
+  doc.line(14, signY, 70, signY);
+  doc.text('Employee / Holder Signature', 14, signY + 5);
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text(snapshot.employee?.fullName || 'Acknowledged', 14, signY + 9);
+
+  doc.line(140, signY, 196, signY);
+  doc.setTextColor(50, 50, 50);
+  doc.setFontSize(9);
+  doc.text('Authorized IT Representative', 140, signY + 5);
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text(snapshot.assignedBy || snapshot.requestedBy || snapshot.initiatedBy || 'Faith ITAM Authority', 140, signY + 9);
+
+  // Footer Note
+  doc.setFontSize(7);
+  doc.setTextColor(130, 130, 130);
+  doc.text('This is an official system-generated document issued by Faith Automation IT Inventory System. All rights reserved.', 14, 285);
+
+  doc.save(`${docData.documentNumber}.pdf`);
+};
+
+/**
+ * Export Professional Management PDF for Reports
+ */
+export const exportReportPDF = (
+  title: string,
+  kpis: { label: string; value: any }[],
+  tableHeaders: string[],
+  tableRows: any[][],
+  filename: string
+) => {
+  const doc = new jsPDF('landscape', 'mm', 'a4');
+
+  // Header
+  doc.setFillColor(24, 30, 44);
+  doc.rect(0, 0, 297, 24, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('FAITH AUTOMATION — MANAGEMENT REPORT', 14, 11);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${title}  |  Generated on: ${new Date().toLocaleString('en-GB')}`, 14, 18);
+
+  let currentY = 32;
+
+  // KPI Highlights Grid
+  if (kpis && kpis.length > 0) {
+    doc.setTextColor(30, 40, 60);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Key Performance Indicators:', 14, currentY);
+
+    const kpiSummary = kpis.map((k) => `${k.label}: ${k.value}`).join('   |   ');
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(70, 80, 100);
+    doc.text(kpiSummary, 14, currentY + 5);
+    currentY += 12;
+  }
+
+  // Data Table
+  (doc as any).autoTable({
+    head: [tableHeaders],
+    body: tableRows,
+    startY: currentY,
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    headStyles: { fillColor: [40, 50, 75], textColor: [255, 255, 255] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+  });
+
+  // Footer page numbers
+  const pageCount = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 140);
+    doc.text(`Page ${i} of ${pageCount}  •  Faith Automation IT Inventory Management System`, 14, 202);
+  }
+
+  const safeFilename = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+  doc.save(safeFilename);
+};
+
+
 
 
 

@@ -24,7 +24,9 @@ import {
   Calendar,
   ExternalLink,
   Users,
+  UserX,
 } from 'lucide-react';
+
 
 export const EmployeeDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -93,9 +95,18 @@ export const EmployeeDetail: React.FC = () => {
             >
               Back to Directory
             </Button>
+            <Button
+              variant="primary"
+              icon={<UserX className="w-4 h-4" />}
+              onClick={() => navigate('/clearance')}
+            >
+              Initiate Exit Clearance
+            </Button>
           </div>
         }
       />
+
+
 
       {/* 3-Card Summary Overview (Section 10) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

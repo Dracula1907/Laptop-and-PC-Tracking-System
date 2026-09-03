@@ -52,9 +52,23 @@ export const DataImport: React.FC = () => {
     }
   };
 
+  const handleRollback = async (batchId: string) => {
+    if (!window.confirm('Are you sure you want to roll back this import batch? Reversible asset fields will revert to their pre-import values.')) {
+      return;
+    }
+    try {
+      await api.post('/bulk/import/rollback', { batchId });
+      showToast('Import batch rolled back successfully', 'success');
+      fetchBatches();
+    } catch (err: any) {
+      showToast(err.response?.data?.message || 'Failed to roll back batch', 'error');
+    }
+  };
+
   useEffect(() => {
     fetchBatches();
   }, []);
+
 
   const processSelectedFile = async (selected: File) => {
     if (!selected.name.endsWith('.xlsx') && !selected.name.endsWith('.xls')) {
@@ -539,11 +553,27 @@ export const DataImport: React.FC = () => {
                   <td className="py-2.5 px-3 text-center text-emerald-400 font-bold">{b.importedRows}</td>
                   <td className="py-2.5 px-3 text-center text-zinc-400">{b.skippedRows}</td>
                   <td className="py-2.5 px-3 text-right">
-                    <span className="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 text-[10px]">
-                      {b.status}
-                    </span>
+                    <div className="flex items-center justify-end space-x-2">
+                      <span className="px-2 py-0.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 text-[10px]">
+                        {b.status}
+                      </span>
+                      {(b as any).rollbackStatus === 'CAN_ROLLBACK' && (
+                        <button
+                          onClick={() => handleRollback(b.id)}
+                          className="px-2 py-0.5 rounded bg-rose-950/40 hover:bg-rose-900/50 text-rose-400 border border-rose-500/30 text-[10px] font-semibold transition-colors"
+                        >
+                          Rollback
+                        </button>
+                      )}
+                      {(b as any).rollbackStatus === 'ROLLED_BACK' && (
+                        <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 text-[10px]">
+                          Rolled Back
+                        </span>
+                      )}
+                    </div>
                   </td>
                 </tr>
+
               ))}
 
               {batches.length === 0 && (

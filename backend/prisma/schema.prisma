@@ -110,6 +110,8 @@ enum AssetAction {
   ASSET_REACTIVATED
   SCRAPPED
   CORRECTION_RECORDED
+  ASSET_GATE_EXIT
+  ASSET_GATE_ENTRY
 }
 
 enum AllocationStatus {
@@ -211,6 +213,136 @@ enum ClaimStatus {
   CANCELLED
 }
 
+enum NotificationCategory {
+  APPROVAL
+  ASSIGNMENT
+  TRANSFER
+  RETURN
+  MAINTENANCE
+  WARRANTY
+  DATA_QUALITY
+  EMPLOYEE
+  RETIREMENT
+  REPLACEMENT
+  BULK_OPERATION
+  DOCUMENT
+  ASSET
+  GATE_MOVEMENT
+  SYSTEM
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum ClearanceStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  PENDING_REVIEW
+  PENDING_APPROVAL
+  CLEARED
+  BLOCKED
+  CANCELLED
+}
+
+enum ClearanceAction {
+  RETURN
+  TRANSFER
+  RETAIN_EXCEPTION
+  MISSING
+  DAMAGED
+  MAINTENANCE_REQUIRED
+}
+
+enum DocumentType {
+  HANDOVER
+  TRANSFER
+  RETURN_RECEIPT
+  CLEARANCE
+  RETIREMENT
+}
+
+enum DocumentStatus {
+  DRAFT
+  FINAL
+  VOIDED
+  SUPERSEDED
+}
+
+enum RetirementReason {
+  END_OF_LIFE
+  OBSOLETE
+  REPEATED_FAILURE
+  SEVERE_DAMAGE
+  UNECONOMICAL_TO_REPAIR
+  SECURITY_SUPPORT_END
+  WARRANTY_EXPIRED
+  PERFORMANCE
+  LOST_OR_UNRECOVERED
+  OTHER
+}
+
+enum RetirementStatus {
+  PROPOSED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum DisposalMethod {
+  ELECTRONIC_WASTE_RECYCLER
+  DONATION
+  BUYBACK
+  SCRAP
+  INTERNAL_REPURPOSE
+  OTHER
+}
+
+enum DataSanitizationStatus {
+  NOT_REQUIRED
+  PENDING
+  COMPLETED
+  FAILED
+  VERIFIED
+}
+
+enum ReplacementStatus {
+  NOT_REQUIRED
+  RECOMMENDED
+  REQUESTED
+  REPLACED
+  DEFERRED
+}
+
+enum GatePresence {
+  INSIDE
+  OUTSIDE
+}
+
+enum GateMovementType {
+  OUT
+  IN
+}
+
+enum GateMovementStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+enum QrCodeStatus {
+  ACTIVE
+  REVOKED
+  REPLACED
+}
+
+
+
 model Role {
   id          String           @id @default(uuid())
   name        String           @unique
@@ -275,6 +407,19 @@ model User {
   approvalHistories    ApprovalHistory[] @relation("ApprovalHistoryPerformedByRelation")
   createdWarranties    Warranty[]        @relation("WarrantyCreatedByRelation")
   createdClaims        WarrantyClaim[]   @relation("ClaimCreatedByRelation")
+  notificationPreferences NotificationPreference[]
+  savedReports         SavedReport[]
+  initiatedClearances  Clearance[]       @relation("ClearanceInitiatedByRelation")
+  reviewedClearances   Clearance[]       @relation("ClearanceReviewedByRelation")
+  approvedClearances   Clearance[]       @relation("ClearanceApprovedByRelation")
+  resolvedClearanceItems ClearanceItem[] @relation("ClearanceItemResolvedByRelation")
+  generatedDocuments   Document[]        @relation("DocumentGeneratedByRelation")
+  requestedRetirements Retirement[]      @relation("RetirementRequestedByRelation")
+  approvedRetirements  Retirement[]      @relation("RetirementApprovedByRelation")
+  qrCodesGenerated     AssetQrCode[]     @relation("QrGeneratedByRelation")
+  qrCodesRevoked       AssetQrCode[]     @relation("QrRevokedByRelation")
+  qrCodesReplaced      AssetQrCode[]     @relation("QrReplacedByRelation")
+  gateMovementsGuarded GateMovement[]    @relation("GateGuardUserRelation")
 }
 
 model Department {
@@ -301,6 +446,7 @@ model Department {
   maintenance       MaintenanceRecord[]
   defaultLocations  Location[] @relation("LocationDefaultDeptRelation")
   targetedApprovals ApprovalRequest[] @relation("ApprovalTargetDeptRelation")
+  gateMovements     GateMovement[]    @relation("GateDepartmentRelation")
 
   @@index([name])
   @@index([code])
@@ -335,6 +481,7 @@ model Location {
   returns           AssetReturn[]
   maintenance       MaintenanceRecord[]
   departmentLocations Department[] @relation("DepartmentDefaultLocationRelation")
+  gateMovements     GateMovement[] @relation("GateLocationRelation")
 
   @@index([name])
   @@index([code])
@@ -373,6 +520,11 @@ model Employee {
   previousHistory    AssetStatusHistory[] @relation("PrevHolderHistoryRelation")
   newHistory         AssetStatusHistory[] @relation("NewHolderHistoryRelation")
   managedDepartments Department[]     @relation("DepartmentManagerRelation")
+  clearances         Clearance[]
+  clearanceExceptionsApproved ClearanceItem[] @relation("ClearanceItemExceptionApprovedRelation")
+  documents          Document[]
+  gateMovements      GateMovement[]   @relation("GateEmployeeRelation")
+
 
   @@index([employeeCode])
   @@index([email])
@@ -452,6 +604,14 @@ model Asset {
   approvalRequests        ApprovalRequest[]
   warranties              Warranty[]
   warrantyClaims          WarrantyClaim[]
+  clearanceItems          ClearanceItem[]
+  documents               Document[]
+  retirements             Retirement[]             @relation("AssetRetirementsRelation")
+  replacementForRetirements Retirement[]           @relation("RetirementReplacementAssetRelation")
+  gatePresence            GatePresence             @default(INSIDE)
+  qrCodes                 AssetQrCode[]
+  gateMovements           GateMovement[]
+
 
   @@index([assetCode])
   @@index([companyAssetId])
@@ -459,6 +619,7 @@ model Asset {
   @@index([status])
   @@index([condition])
   @@index([allocationStatus])
+  @@index([gatePresence])
   @@index([criticality])
   @@index([dataQualityStatus])
   @@index([holderType])
@@ -524,6 +685,7 @@ model AssetAssignment {
   updatedAt             DateTime        @updatedAt
 
   returns               AssetReturn[]
+  clearanceItems        ClearanceItem[]
 
   @@index([assetId])
   @@index([employeeId])
@@ -564,6 +726,8 @@ model AssetTransfer {
   status               WorkflowStatus  @default(PENDING)
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt
+
+  clearanceItems       ClearanceItem[]
 
   @@index([assetId])
   @@index([previousHolderId])
@@ -617,6 +781,8 @@ model AssetReturn {
   status              WorkflowStatus     @default(COMPLETED)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
+
+  clearanceItems      ClearanceItem[]
 
   @@index([returnCode])
   @@index([assetId])
@@ -688,6 +854,7 @@ model MaintenanceRecord {
   parts                  MaintenancePart[]
   returns                AssetReturn[]
   warrantyClaims         WarrantyClaim[]
+  clearanceItems         ClearanceItem[]
 
   @@index([maintenanceCode])
   @@index([assetId])
@@ -797,19 +964,61 @@ model AuditLog {
 }
 
 model Notification {
-  id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type       String
-  title      String
-  message    String
-  entityType String?
-  entityId   String?
-  isRead     Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id          String               @id @default(uuid())
+  userId      String
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    NotificationCategory @default(SYSTEM)
+  type        String
+  priority    NotificationPriority @default(NORMAL)
+  title       String
+  message     String
+  entityType  String?
+  entityId    String?
+  assetId     String?
+  actionRoute String?
+  isRead      Boolean              @default(false)
+  readAt      DateTime?
+  expiresAt   DateTime?
+  fingerprint String?
+  metadata    String?              @db.Text
+  createdAt   DateTime             @default(now())
 
+  @@index([userId, isRead])
+  @@index([userId, category])
+  @@index([fingerprint])
+  @@index([createdAt])
+  @@index([priority])
+}
+
+model NotificationPreference {
+  id           String               @id @default(uuid())
+  userId       String
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     NotificationCategory
+  inAppEnabled Boolean              @default(true)
+  emailEnabled Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@unique([userId, category])
   @@index([userId])
-  @@index([isRead])
+}
+
+model SavedReport {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  reportType  String
+  filters     String   @db.Text
+  sortBy      String?
+  sortOrder   String?
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([reportType])
 }
 
 model SystemSetting {
@@ -822,29 +1031,37 @@ model SystemSetting {
 }
 
 model ImportBatch {
-  id           String         @id @default(uuid())
-  fileName     String
-  fileHash     String?
-  uploadedById String?
-  uploadedBy   User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  uploadedAt   DateTime       @default(now())
-  totalRows    Int            @default(0)
-  validRows    Int            @default(0)
-  warningRows  Int            @default(0)
-  errorRows    Int            @default(0)
-  importedRows Int            @default(0)
-  skippedRows  Int            @default(0)
-  status       ImportStatus   @default(READY)
+  id             String         @id @default(uuid())
+  fileName       String
+  fileHash       String?
+  entityType     String         @default("ASSET")
+  mode           String         @default("CREATE_AND_UPDATE")
+  stagedData     String?        @db.Text
+  changeSummary  String?        @db.Text
+  rollbackStatus String?        @default("CAN_ROLLBACK")
+  rollbackLog    String?        @db.Text
+  uploadedById   String?
+  uploadedBy     User?          @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedAt     DateTime       @default(now())
+  totalRows      Int            @default(0)
+  validRows      Int            @default(0)
+  warningRows    Int            @default(0)
+  errorRows      Int            @default(0)
+  importedRows   Int            @default(0)
+  skippedRows    Int            @default(0)
+  status         ImportStatus   @default(READY)
 
-  assets       Asset[]
-  rowLogs      ImportRowLog[]
+  assets         Asset[]
+  rowLogs        ImportRowLog[]
 
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([status])
   @@index([uploadedAt])
+  @@index([entityType])
 }
+
 
 model ImportRowLog {
   id             String      @id @default(uuid())
@@ -898,6 +1115,8 @@ model ApprovalRequest {
   updatedAt            DateTime            @updatedAt
 
   history              ApprovalHistory[]
+  retirements          Retirement[]        @relation("RetirementApprovalRelation")
+  gateMovements        GateMovement[]      @relation("GateMovementApprovalRelation")
 
   @@index([requestCode])
   @@index([requestType])
@@ -1025,5 +1244,233 @@ model WarrantyClaim {
   @@index([provider])
   @@index([maintenanceId])
 }
+
+model Clearance {
+  id            String          @id @default(uuid())
+  clearanceCode String          @unique
+  employeeId    String
+  employee      Employee        @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  exitDate      DateTime
+  initiatedDate DateTime        @default(now())
+  status        ClearanceStatus @default(IN_PROGRESS)
+  reason        String?
+  notes         String?
+  initiatedById String
+  initiatedBy   User            @relation("ClearanceInitiatedByRelation", fields: [initiatedById], references: [id])
+  reviewedById  String?
+  reviewedBy    User?           @relation("ClearanceReviewedByRelation", fields: [reviewedById], references: [id])
+  approvedById  String?
+  approvedBy    User?           @relation("ClearanceApprovedByRelation", fields: [approvedById], references: [id])
+  completedDate DateTime?
+  slaDays       Int             @default(7)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  items         ClearanceItem[]
+
+  @@index([clearanceCode])
+  @@index([employeeId])
+  @@index([status])
+  @@index([exitDate])
+  @@index([initiatedById])
+}
+
+model ClearanceItem {
+  id                    String             @id @default(uuid())
+  clearanceId           String
+  clearance             Clearance          @relation(fields: [clearanceId], references: [id], onDelete: Cascade)
+  assetId               String
+  asset                 Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  assignmentId          String
+  assignment            AssetAssignment    @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  action                ClearanceAction    @default(RETURN)
+  status                String             @default("PENDING") // PENDING, RESOLVED, BLOCKED
+  returnId              String?
+  returnRel             AssetReturn?       @relation(fields: [returnId], references: [id], onDelete: SetNull)
+  transferId            String?
+  transferRel           AssetTransfer?     @relation(fields: [transferId], references: [id], onDelete: SetNull)
+  maintenanceId         String?
+  maintenanceRel        MaintenanceRecord? @relation(fields: [maintenanceId], references: [id], onDelete: SetNull)
+  inspectionStatus      String?
+  conditionAtClearance  AssetCondition?
+  damageDescription     String?
+  missingAccessories    String?
+  exceptionReason       String?
+  exceptionApprovedById String?
+  exceptionApprovedBy   Employee?          @relation("ClearanceItemExceptionApprovedRelation", fields: [exceptionApprovedById], references: [id], onDelete: SetNull)
+  resolutionNotes       String?
+  resolvedById          String?
+  resolvedBy            User?              @relation("ClearanceItemResolvedByRelation", fields: [resolvedById], references: [id], onDelete: SetNull)
+  resolvedAt            DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([clearanceId])
+  @@index([assetId])
+  @@index([assignmentId])
+  @@index([status])
+  @@index([action])
+}
+
+model Document {
+  id                String         @id @default(uuid())
+  documentNumber    String         @unique
+  documentType      DocumentType
+  relatedEntityType String
+  relatedEntityId   String
+  assetId           String?
+  asset             Asset?         @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  employeeId        String?
+  employee          Employee?      @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  generatedById     String
+  generatedBy       User           @relation("DocumentGeneratedByRelation", fields: [generatedById], references: [id])
+  generatedAt       DateTime       @default(now())
+  version           Int            @default(1)
+  status            DocumentStatus @default(FINAL)
+  fileReference     String?
+  fileHash          String?
+  snapshotData      String         @db.Text
+  remarks           String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([documentNumber])
+  @@index([documentType])
+  @@index([relatedEntityType, relatedEntityId])
+  @@index([assetId])
+  @@index([employeeId])
+  @@index([generatedById])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Retirement {
+  id                     String                 @id @default(uuid())
+  retirementCode         String                 @unique
+  assetId                String
+  asset                  Asset                  @relation("AssetRetirementsRelation", fields: [assetId], references: [id], onDelete: Cascade)
+  status                 RetirementStatus       @default(PROPOSED)
+  reason                 RetirementReason
+  overrideReason         String?
+  requestedDate          DateTime               @default(now())
+  retirementDate         DateTime?
+  requestedById          String
+  requestedBy            User                   @relation("RetirementRequestedByRelation", fields: [requestedById], references: [id])
+  approvedById           String?
+  approvedBy             User?                  @relation("RetirementApprovedByRelation", fields: [approvedById], references: [id])
+  approvalRequestId      String?
+  approvalRequest        ApprovalRequest?       @relation("RetirementApprovalRelation", fields: [approvalRequestId], references: [id], onDelete: SetNull)
+  finalCondition         AssetCondition?
+  finalLocation          String?
+  dataSanitizationStatus DataSanitizationStatus @default(PENDING)
+  disposalMethod         DisposalMethod?
+  disposalVendor         String?
+  disposalReference      String?
+  disposalDate           DateTime?
+  residualValue          Float?
+  replacementAssetId     String?
+  replacementAsset       Asset?                 @relation("RetirementReplacementAssetRelation", fields: [replacementAssetId], references: [id], onDelete: SetNull)
+  replacementStatus      ReplacementStatus      @default(NOT_REQUIRED)
+  remarks                String?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  @@index([retirementCode])
+  @@index([assetId])
+  @@index([status])
+  @@index([reason])
+  @@index([requestedDate])
+  @@index([requestedById])
+  @@index([approvedById])
+  @@index([approvalRequestId])
+  @@index([replacementAssetId])
+}
+
+model Gate {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  location  String?
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  movements GateMovement[]
+
+  @@index([code])
+  @@index([status])
+}
+
+model AssetQrCode {
+  id                String       @id @default(uuid())
+  assetId           String
+  asset             Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  token             String       @unique
+  status            QrCodeStatus @default(ACTIVE)
+  generatedAt       DateTime     @default(now())
+  generatedById     String?
+  generatedBy       User?        @relation("QrGeneratedByRelation", fields: [generatedById], references: [id], onDelete: SetNull)
+  revokedAt         DateTime?
+  revokedById       String?
+  revokedBy         User?        @relation("QrRevokedByRelation", fields: [revokedById], references: [id], onDelete: SetNull)
+  revocationReason  String?
+  replacedAt        DateTime?
+  replacedById      String?
+  replacedBy        User?        @relation("QrReplacedByRelation", fields: [replacedById], references: [id], onDelete: SetNull)
+  replacementReason String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  movements GateMovement[]
+
+  @@index([assetId])
+  @@index([token])
+  @@index([status])
+}
+
+model GateMovement {
+  id                String             @id @default(uuid())
+  movementCode      String             @unique
+  assetId           String
+  asset             Asset              @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  qrCodeId          String?
+  qrCode            AssetQrCode?       @relation(fields: [qrCodeId], references: [id], onDelete: SetNull)
+  movementType      GateMovementType
+  movementDateTime  DateTime           @default(now())
+  gateId            String?
+  gate              Gate?              @relation(fields: [gateId], references: [id], onDelete: SetNull)
+  guardUserId       String?
+  guardUser         User?              @relation("GateGuardUserRelation", fields: [guardUserId], references: [id], onDelete: SetNull)
+  employeeId        String?
+  employee          Employee?          @relation("GateEmployeeRelation", fields: [employeeId], references: [id], onDelete: SetNull)
+  departmentId      String?
+  department        Department?        @relation("GateDepartmentRelation", fields: [departmentId], references: [id], onDelete: SetNull)
+  locationId        String?
+  location          Location?          @relation("GateLocationRelation", fields: [locationId], references: [id], onDelete: SetNull)
+  destination       String?
+  purpose           String?
+  expectedReturn    DateTime?
+  actualReturn      DateTime?
+  relatedMovementId String?
+  relatedMovement   GateMovement?      @relation("MovementLink", fields: [relatedMovementId], references: [id], onDelete: SetNull)
+  childMovements    GateMovement[]     @relation("MovementLink")
+  remarks           String?
+  status            GateMovementStatus @default(OPEN)
+  approvalRequestId String?
+  approvalRequest   ApprovalRequest?   @relation("GateMovementApprovalRelation", fields: [approvalRequestId], references: [id], onDelete: SetNull)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([movementCode])
+  @@index([assetId])
+  @@index([movementType])
+  @@index([movementDateTime])
+  @@index([status])
+  @@index([gateId])
+  @@index([guardUserId])
+  @@index([employeeId])
+  @@index([relatedMovementId])
+}
+
 
 

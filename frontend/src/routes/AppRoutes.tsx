@@ -27,6 +27,12 @@ import { Settings } from '../pages/Settings';
 import { DataImport } from '../pages/DataImport';
 import { DataVerification } from '../pages/DataVerification';
 
+import { Clearance } from '../pages/Clearance';
+import { ClearanceDetail } from '../pages/ClearanceDetail';
+import { Documents } from '../pages/Documents';
+import { Retirement } from '../pages/Retirement';
+import { SecurityGate } from '../pages/SecurityGate';
+
 export const AppRoutes: React.FC = () => {
   return (
     <Routes>
@@ -50,6 +56,11 @@ export const AppRoutes: React.FC = () => {
           <Route path="/maintenance" element={<Maintenance />} />
           <Route path="/approvals" element={<ApprovalCenter />} />
           <Route path="/warranties" element={<WarrantyManagement />} />
+          <Route path="/clearance" element={<Clearance />} />
+          <Route path="/clearance/:id" element={<ClearanceDetail />} />
+          <Route path="/documents" element={<Documents />} />
+          <Route path="/retirements" element={<Retirement />} />
+          <Route path="/security-gate" element={<SecurityGate />} />
 
           <Route path="/employees" element={<Employees />} />
           <Route path="/employees/:id" element={<EmployeeDetail />} />
@@ -60,6 +71,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/settings" element={<Settings />} />
+
 
           {/* Admin Only Routes */}
           <Route element={<ProtectedRoute roles={['ADMIN']} />}>

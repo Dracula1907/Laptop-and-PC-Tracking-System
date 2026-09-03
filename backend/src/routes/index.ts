@@ -18,6 +18,13 @@ import transferRoutes from './transfer.routes';
 import returnRoutes from './return.routes';
 import approvalRoutes from './approval.routes';
 import warrantyRoutes from './warranty.routes';
+import clearanceRoutes from './clearance.routes';
+import documentRoutes from './document.routes';
+import bulkRoutes from './bulk.routes';
+import retirementRoutes from './retirement.routes';
+import securityGateRoutes from './security-gate.routes';
+import qrRoutes from './qr.routes';
+import gateRoutes from './gate-master.routes';
 
 const router = Router();
 
@@ -29,12 +36,20 @@ router.use('/transfers', transferRoutes);
 router.use('/returns', returnRoutes);
 router.use('/approvals', approvalRoutes);
 router.use('/warranties', warrantyRoutes);
+router.use('/clearance', clearanceRoutes);
+router.use('/documents', documentRoutes);
+router.use('/bulk', bulkRoutes);
+router.use('/retirements', retirementRoutes);
+router.use('/security-gate', securityGateRoutes);
+router.use('/qr', qrRoutes);
+router.use('/gates', gateRoutes);
 router.use('/employees', employeeRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/locations', locationRoutes);
 router.use('/maintenance', maintenanceRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/reports', reportRoutes);
+
 router.use('/audit-logs', auditRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/users', userRoutes);
@@ -42,4 +57,5 @@ router.use('/settings', settingRoutes);
 router.use('/import', importRoutes);
 
 export default router;
+
 

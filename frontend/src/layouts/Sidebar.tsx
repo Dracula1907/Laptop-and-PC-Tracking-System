@@ -20,7 +20,12 @@ import {
   ChevronRight,
   FileSpreadsheet,
   Database,
+  UserX,
+  FileCheck,
+  Archive,
+  ScanLine,
 } from 'lucide-react';
+
 
 interface SidebarProps {
   collapsed: boolean;
@@ -103,7 +108,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                 <NavItem to="/returns" icon={<RotateCcw className="w-4 h-4" />} label="Returns" collapsed={collapsed} />
                 <NavItem to="/maintenance" icon={<Wrench className="w-4 h-4" />} label="Maintenance" collapsed={collapsed} />
                 <NavItem to="/warranties" icon={<ShieldAlert className="w-4 h-4 text-indigo-400" />} label="Warranty & Contracts" collapsed={collapsed} />
+                <NavItem to="/clearance" icon={<UserX className="w-4 h-4 text-amber-400" />} label="Offboarding Clearance" collapsed={collapsed} />
+                <NavItem to="/documents" icon={<FileCheck className="w-4 h-4 text-emerald-400" />} label="Official Documents" collapsed={collapsed} />
+                <NavItem to="/retirements" icon={<Archive className="w-4 h-4 text-rose-400" />} label="Retirement & Replacement" collapsed={collapsed} />
+                <NavItem to="/security-gate" icon={<ScanLine className="w-4 h-4 text-cyan-400" />} label="Security Gate" collapsed={collapsed} />
               </nav>
+
             </div>
 
             {/* ORGANIZATION */}
