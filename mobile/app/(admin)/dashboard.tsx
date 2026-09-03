@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Header } from '../../src/components/Header';
 import { MetricCard } from '../../src/components/MetricCard';
 import { QrScannerModal } from '../../src/components/QrScannerModal';
@@ -22,6 +23,7 @@ import { colors } from '../../src/theme/colors';
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [kpis, setKpis] = useState<GateKPIs>({
     assetsOutside: 0,
@@ -102,78 +104,99 @@ export default function AdminDashboard() {
 
   return (
     <View style={styles.container}>
-      <Header subtitle="Administrator Mobile Console" />
+      <Header subtitle="Enterprise Administration Console" />
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.cyan} />}
       >
-        {/* Quick QR Scanner Action */}
-        <TouchableOpacity style={styles.scanBanner} onPress={() => setScannerVisible(true)}>
+        {/* Quick QR Scanner Banner */}
+        <TouchableOpacity
+          style={styles.scanBanner}
+          onPress={() => setScannerVisible(true)}
+          activeOpacity={0.8}
+        >
           <View style={styles.scanIconBox}>
-            <Ionicons name="qr-code-outline" size={28} color={colors.textDark} />
+            <Ionicons name="qr-code-outline" size={26} color={colors.textDark} />
           </View>
           <View style={styles.scanTextGroup}>
-            <Text style={styles.scanTitle}>SCAN ANY ASSET QR</Text>
-            <Text style={styles.scanSubtitle}>Instant full asset profile & hardware inspection</Text>
+            <Text style={styles.scanTitle}>SCAN ASSET QR TAG</Text>
+            <Text style={styles.scanSubtitle}>
+              Instantly resolve hardware identity, warranty, and gate status
+            </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.cyan} />
+          <Ionicons name="chevron-forward" size={18} color={colors.cyan} />
         </TouchableOpacity>
 
-        {/* Operational KPIs */}
-        <Text style={styles.sectionHeading}>INVENTORY & GATE OVERVIEW</Text>
+        {/* Physical Gate Operations Section */}
+        <Text style={styles.sectionHeading}>PHYSICAL GATE MONITORING</Text>
         <View style={styles.metricsGrid}>
-          <View style={styles.metricsRow}>
-            <MetricCard
-              label="TOTAL ASSETS"
-              value={assetCounts.total || '—'}
-              subtitle="Registered in system"
-              icon="layers-outline"
-              color={colors.cyan}
-            />
-            <MetricCard
-              label="OUTSIDE GATE"
-              value={kpis.assetsOutside}
-              subtitle="Currently off-site"
-              icon="arrow-up-circle-outline"
-              color={colors.amber}
-              bg="rgba(245, 158, 11, 0.08)"
-              borderColor={colors.amberBorder}
-            />
-          </View>
-          <View style={styles.metricsRow}>
-            <MetricCard
-              label="INSIDE PREMISES"
-              value={kpis.assetsInside}
-              subtitle="Verified on-site"
-              icon="shield-checkmark-outline"
-              color={colors.emerald}
-              bg="rgba(16, 185, 129, 0.08)"
-              borderColor={colors.emeraldBorder}
-            />
-            <MetricCard
-              label="TODAY'S EXITS"
-              value={kpis.todayOut}
-              subtitle="Movements recorded"
-              icon="exit-outline"
-              color={colors.cyanLight}
-            />
-          </View>
+          <MetricCard
+            label="ASSETS OUTSIDE"
+            value={kpis.assetsOutside}
+            subvalue={kpis.overdueReturns ? `${kpis.overdueReturns} Overdue` : undefined}
+            color={colors.amber}
+            icon="arrow-up-circle-outline"
+            onPress={() => router.push('/(admin)/gate')}
+          />
+          <MetricCard
+            label="TODAY'S EXITS"
+            value={kpis.todayOut}
+            color={colors.cyan}
+            icon="exit-outline"
+            onPress={() => router.push('/(admin)/gate')}
+          />
+          <MetricCard
+            label="TODAY'S RETURNS"
+            value={kpis.todayIn}
+            color={colors.emerald}
+            icon="enter-outline"
+            onPress={() => router.push('/(admin)/gate')}
+          />
         </View>
 
-        {/* Management Modules */}
-        <Text style={styles.sectionHeading}>MANAGEMENT MODULES</Text>
-        <View style={styles.modulesGrid}>
+        {/* Inventory Statistics */}
+        <Text style={styles.sectionHeading}>INVENTORY LIFECYCLE STATS</Text>
+        <View style={styles.metricsGrid}>
+          <MetricCard
+            label="TOTAL ASSETS"
+            value={assetCounts.total}
+            color={colors.cyan}
+            icon="laptop-outline"
+            onPress={() => router.push('/(admin)/assets')}
+          />
+          <MetricCard
+            label="ACTIVE IN-USE"
+            value={assetCounts.active}
+            color={colors.emerald}
+            icon="checkmark-circle-outline"
+            onPress={() => router.push('/(admin)/assets')}
+          />
+          <MetricCard
+            label="UNDER REPAIR"
+            value={assetCounts.repair}
+            color={colors.rose}
+            icon="construct-outline"
+            onPress={() => router.push('/(admin)/assets')}
+          />
+        </View>
+
+        {/* Operations Hub */}
+        <Text style={styles.sectionHeading}>ENTERPRISE MODULES</Text>
+        <View style={styles.moduleGrid}>
           {modules.map((m, idx) => (
             <TouchableOpacity
               key={idx}
-              style={styles.moduleItem}
+              style={styles.moduleCard}
               onPress={() => router.push(m.route as any)}
+              activeOpacity={0.7}
             >
-              <View style={[styles.moduleIconBox, { borderColor: m.color }]}>
+              <View style={[styles.moduleIconBox, { backgroundColor: m.color + '15', borderColor: m.color + '40' }]}>
                 <Ionicons name={m.icon as any} size={22} color={m.color} />
               </View>
-              <Text style={styles.moduleName}>{m.name}</Text>
+              <Text style={styles.moduleTitle} numberOfLines={1}>
+                {m.name}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -185,15 +208,15 @@ export default function AdminDashboard() {
         onClose={() => setScannerVisible(false)}
         onScan={handleScan}
         title="Admin Asset Scanner"
-        subtitle="Align QR code to view complete asset profile"
+        subtitle="Align QR code to inspect complete hardware profile"
       />
 
-      {/* Scan Loading / Result Modal */}
+      {/* Scan Loading Modal */}
       {scanLoading && (
         <Modal transparent visible={scanLoading}>
-          <View style={styles.loadingOverlay}>
+          <View style={styles.modalOverlay}>
             <ActivityIndicator size="large" color={colors.cyan} />
-            <Text style={styles.loadingText}>Resolving asset identity...</Text>
+            <Text style={styles.loadingText}>Resolving encrypted QR tag...</Text>
           </View>
         </Modal>
       )}
@@ -214,7 +237,7 @@ export default function AdminDashboard() {
         </Modal>
       )}
 
-      {/* Scanned Full Asset Details Modal */}
+      {/* Scanned Full Asset Details Modal with Dynamic Safe Area */}
       {scannedAsset && (
         <Modal
           visible={!!scannedAsset}
@@ -222,7 +245,7 @@ export default function AdminDashboard() {
           onRequestClose={() => setScannedAsset(null)}
         >
           <View style={styles.fullModalContainer}>
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top + 8, 20) }]}>
               <View>
                 <Text style={styles.modalHeaderTitle}>
                   {scannedAsset.companyAssetId || scannedAsset.assetCode}
@@ -234,6 +257,7 @@ export default function AdminDashboard() {
               <TouchableOpacity
                 style={styles.modalCloseButton}
                 onPress={() => setScannedAsset(null)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons name="close" size={20} color={colors.textPrimary} />
               </TouchableOpacity>
@@ -290,8 +314,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   sectionHeading: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
     color: colors.textMuted,
     letterSpacing: 0.8,
     marginTop: 4,
@@ -299,72 +323,61 @@ const styles = StyleSheet.create({
   metricsGrid: {
     gap: 10,
   },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modulesGrid: {
+  moduleGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
-  moduleItem: {
+  moduleCard: {
     width: '48%',
     backgroundColor: colors.card,
-    padding: 14,
     borderRadius: 12,
+    padding: 14,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
     gap: 8,
   },
   moduleIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: colors.surface,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  moduleName: {
-    fontSize: 11,
-    fontWeight: '600',
+  moduleTitle: {
+    fontSize: 12,
+    fontWeight: '700',
     color: colors.textPrimary,
     textAlign: 'center',
   },
-  loadingOverlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(10, 13, 20, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 20,
     gap: 12,
   },
   loadingText: {
     color: colors.cyan,
     fontSize: 13,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+    fontWeight: '700',
   },
   alertCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 20,
+    padding: 24,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     width: '100%',
     maxWidth: 320,
   },
   alertTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -372,20 +385,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
   },
   closeAlertButton: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
     paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: 8,
-    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginTop: 4,
   },
   closeAlertText: {
     color: colors.textPrimary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
   fullModalContainer: {
@@ -397,7 +410,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 48,
     paddingBottom: 14,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
@@ -412,13 +424,16 @@ const styles = StyleSheet.create({
   modalHeaderSubtitle: {
     fontSize: 11,
     color: colors.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
   modalCloseButton: {
-    padding: 8,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

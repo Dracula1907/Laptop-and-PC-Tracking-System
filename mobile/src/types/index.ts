@@ -95,6 +95,7 @@ export interface CurrentOutsideItem {
   holderName: string;
   department: string;
   location: string;
+  movementId?: string;
   movementCode: string;
   outDateTime: string | null;
   gateName: string;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 
 interface QrScannerModalProps {
@@ -27,18 +28,27 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
   title = 'Scan Asset QR Tag',
   subtitle = 'Align QR code inside the target reticle',
 }) => {
+  const insets = useSafeAreaInsets();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [torch, setTorch] = useState(false);
   const [manualToken, setManualToken] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const lastScanTimeRef = useRef<number>(0);
 
   const handleBarcodeScanned = ({ data }: { data: string }) => {
-    if (scanned || !data) return;
+    const now = Date.now();
+    // Debounce duplicate reads within 1500ms
+    if (scanned || now - lastScanTimeRef.current < 1500 || !data) return;
+    lastScanTimeRef.current = now;
     setScanned(true);
+
     onScan(data.trim());
-    // Auto reset scanned after short delay
-    setTimeout(() => setScanned(false), 2000);
+
+    // Reset scanned state after 2 seconds
+    setTimeout(() => {
+      setScanned(false);
+    }, 2000);
   };
 
   const handleManualSubmit = () => {
@@ -53,18 +63,27 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <View style={styles.container}>
-        {/* Top Navigation Bar */}
-        <View style={styles.topBar}>
-          <TouchableOpacity style={styles.iconButton} onPress={onClose}>
-            <Ionicons name="close" size={24} color={colors.textPrimary} />
+        {/* Top Navigation Bar with Dynamic Safe Insets */}
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top + 8, 20) }]}>
+          <TouchableOpacity
+            style={styles.iconButton}
+            onPress={onClose}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Close scanner"
+          >
+            <Ionicons name="close" size={22} color={colors.textPrimary} />
           </TouchableOpacity>
+
           <View style={styles.titleGroup}>
             <Text style={styles.titleText}>{title}</Text>
             <Text style={styles.subtitleText}>{subtitle}</Text>
           </View>
+
           <TouchableOpacity
             style={[styles.iconButton, torch && styles.iconButtonActive]}
             onPress={() => setTorch(!torch)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Toggle flash"
           >
             <Ionicons
               name={torch ? 'flash' : 'flash-outline'}
@@ -85,7 +104,7 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
             <Ionicons name="camera-outline" size={48} color={colors.cyan} />
             <Text style={styles.permTitle}>Camera Access Required</Text>
             <Text style={styles.permDesc}>
-              Faith Automation IT Inventory requires camera access to scan physical laptop and asset QR tags.
+              Faith Automation IT Inventory requires camera access to scan physical laptop and asset QR tags at security gates.
             </Text>
             <TouchableOpacity style={styles.primaryButton} onPress={requestPermission}>
               <Text style={styles.primaryButtonText}>Grant Camera Permission</Text>
@@ -107,33 +126,33 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
             {/* Darkened Overlay & Target Reticle */}
             <View style={styles.overlay}>
-              <View style={styles.reticle}>
+              <View style={[styles.reticle, scanned && styles.reticleScanned]}>
                 {/* Corner Accents */}
-                <View style={[styles.corner, styles.topLeft]} />
-                <View style={[styles.corner, styles.topRight]} />
-                <View style={[styles.corner, styles.bottomLeft]} />
-                <View style={[styles.corner, styles.bottomRight]} />
+                <View style={[styles.corner, styles.topLeft, scanned && styles.cornerScanned]} />
+                <View style={[styles.corner, styles.topRight, scanned && styles.cornerScanned]} />
+                <View style={[styles.corner, styles.bottomLeft, scanned && styles.cornerScanned]} />
+                <View style={[styles.corner, styles.bottomRight, scanned && styles.cornerScanned]} />
 
                 {scanned && (
                   <View style={styles.scannedIndicator}>
                     <ActivityIndicator size="small" color={colors.cyan} />
-                    <Text style={styles.scannedText}>Processing Tag...</Text>
+                    <Text style={styles.scannedText}>Verifying QR Tag...</Text>
                   </View>
                 )}
               </View>
 
-              <Text style={styles.guideText}>FAITH AUTOMATION QR ONLY</Text>
+              <Text style={styles.guideText}>FAITH AUTOMATION ASSET QR</Text>
             </View>
           </View>
         )}
 
-        {/* Bottom Bar: Manual Code Option */}
-        <View style={styles.bottomBar}>
+        {/* Bottom Bar with Dynamic Safe Insets */}
+        <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom + 8, 16) }]}>
           {showManual ? (
             <View style={styles.manualInputGroup}>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. FAITH-QR-FAA001-..."
+                placeholder="Enter QR token (FAITH-QR-...)"
                 placeholderTextColor={colors.textMuted}
                 value={manualToken}
                 onChangeText={setManualToken}
@@ -169,15 +188,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
+    paddingBottom: 14,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
   iconButton: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: 8,
     backgroundColor: colors.card,
     borderWidth: 1,
@@ -200,7 +218,7 @@ const styles = StyleSheet.create({
   subtitleText: {
     fontSize: 11,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 1,
   },
   cameraContainer: {
     flex: 1,
@@ -222,11 +240,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  reticleScanned: {
+    borderColor: colors.cyan,
+    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+  },
   corner: {
     position: 'absolute',
     width: 24,
     height: 24,
     borderColor: colors.cyan,
+  },
+  cornerScanned: {
+    borderColor: colors.emerald,
   },
   topLeft: {
     top: -2,
@@ -257,7 +282,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 10,
   },
   scannedIndicator: {
-    backgroundColor: 'rgba(10, 13, 20, 0.9)',
+    backgroundColor: 'rgba(10, 13, 20, 0.92)',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
@@ -270,15 +295,15 @@ const styles = StyleSheet.create({
   scannedText: {
     color: colors.cyan,
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   guideText: {
     color: colors.cyan,
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 1,
     marginTop: 24,
-    backgroundColor: 'rgba(10, 13, 20, 0.8)',
+    backgroundColor: 'rgba(10, 13, 20, 0.85)',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 4,
@@ -286,7 +311,8 @@ const styles = StyleSheet.create({
     borderColor: colors.borderCyan,
   },
   bottomBar: {
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,

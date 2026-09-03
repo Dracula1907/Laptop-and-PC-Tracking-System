@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -8,14 +10,30 @@ interface HeaderProps {
   title?: string;
   subtitle?: string;
   showLogout?: boolean;
+  showBack?: boolean;
+  onBack?: () => void;
+  rightAction?: React.ReactNode;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   title = 'Faith IT Inventory',
   subtitle,
   showLogout = true,
+  showBack = false,
+  onBack,
+  rightAction,
 }) => {
   const { user, logout } = useAuth();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      router.back();
+    }
+  };
 
   const getRoleBadgeStyle = (role?: string) => {
     switch (role) {
@@ -33,16 +51,32 @@ export const Header: React.FC<HeaderProps> = ({
   const badge = getRoleBadgeStyle(user?.roleCode);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top + 8, 14) }]}>
       <View style={styles.titleRow}>
         <View style={styles.brandGroup}>
-          <View style={styles.brandIconContainer}>
-            <Ionicons name="laptop-outline" size={20} color={colors.cyan} />
-          </View>
-          <View>
-            <Text style={styles.brandTitle}>{title}</Text>
+          {showBack ? (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={handleBack}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              accessibilityLabel="Go back"
+            >
+              <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.brandIconContainer}>
+              <Ionicons name="laptop-outline" size={18} color={colors.cyan} />
+            </View>
+          )}
+
+          <View style={styles.textContainer}>
+            <Text style={styles.brandTitle} numberOfLines={1}>
+              {title}
+            </Text>
             {subtitle ? (
-              <Text style={styles.brandSubtitle}>{subtitle}</Text>
+              <Text style={styles.brandSubtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
             ) : user ? (
               <View style={styles.userBadgeRow}>
                 <Text style={styles.usernameText}>{user.username}</Text>
@@ -56,11 +90,20 @@ export const Header: React.FC<HeaderProps> = ({
           </View>
         </View>
 
-        {showLogout && user && (
-          <TouchableOpacity style={styles.logoutButton} onPress={logout} accessibilityLabel="Logout">
-            <Ionicons name="log-out-outline" size={20} color={colors.textSecondary} />
-          </TouchableOpacity>
-        )}
+        <View style={styles.rightActions}>
+          {rightAction}
+
+          {showLogout && user && (
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={logout}
+              accessibilityLabel="Logout"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="log-out-outline" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -69,8 +112,7 @@ export const Header: React.FC<HeaderProps> = ({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 14,
+    paddingBottom: 12,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
@@ -79,11 +121,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 40,
   },
   brandGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   brandIconContainer: {
     width: 36,
@@ -95,9 +149,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  textContainer: {
+    flex: 1,
+  },
   brandTitle: {
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '800',
     color: colors.textPrimary,
     letterSpacing: 0.3,
   },
@@ -115,7 +172,7 @@ const styles = StyleSheet.create({
   usernameText: {
     fontSize: 11,
     color: colors.textSecondary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   roleBadge: {
     paddingHorizontal: 6,
@@ -125,14 +182,22 @@ const styles = StyleSheet.create({
   },
   roleBadgeText: {
     fontSize: 9,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
+  rightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   logoutButton: {
-    padding: 8,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

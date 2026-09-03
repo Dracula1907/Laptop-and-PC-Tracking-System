@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
 import { colors } from '../src/theme/colors';
 import { API_BASE_URL } from '../src/api/client';
@@ -25,6 +26,7 @@ export default function LoginScreen() {
 
   const { login } = useAuth();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -64,7 +66,16 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(insets.top + 16, 32),
+            paddingBottom: Math.max(insets.bottom + 16, 24),
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Brand Header */}
         <View style={styles.brandContainer}>
           <View style={styles.brandLogo}>

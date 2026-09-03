@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScannedAssetData, UserRole } from '../types';
 import { colors } from '../theme/colors';
+import { AccordionSection } from './AccordionSection';
 
 interface AssetDetailViewProps {
   asset: ScannedAssetData;
@@ -24,7 +25,7 @@ export const AssetDetailView: React.FC<AssetDetailViewProps> = ({ asset, role })
       >
         <Ionicons
           name={asset.gatePresence === 'OUTSIDE' ? 'arrow-up-circle' : 'shield-checkmark'}
-          size={20}
+          size={22}
           color={asset.gatePresence === 'OUTSIDE' ? colors.amber : colors.emerald}
         />
         <View style={styles.stateTextGroup}>
@@ -33,23 +34,25 @@ export const AssetDetailView: React.FC<AssetDetailViewProps> = ({ asset, role })
           </Text>
           <Text style={styles.stateSubtitle}>
             {asset.gatePresence === 'OUTSIDE'
-              ? 'Asset is currently outside company premises'
-              : 'Verified inside premises'}
+              ? 'Asset is currently recorded as outside company premises'
+              : 'Verified safely inside company premises'}
           </Text>
         </View>
       </View>
 
-      {/* Asset Identification Card */}
+      {/* Primary Asset Identification Card */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Ionicons name="laptop-outline" size={18} color={colors.cyan} />
-          <Text style={styles.cardTitle}>Asset Identity</Text>
+          <Text style={styles.cardTitle}>Asset Identity & Custody</Text>
         </View>
 
         <View style={styles.row}>
           <View style={styles.col}>
             <Text style={styles.label}>Asset ID / Code</Text>
-            <Text style={[styles.value, styles.codeText]}>{asset.assetCode}</Text>
+            <Text style={[styles.value, styles.codeText]}>
+              {asset.companyAssetId || asset.assetCode}
+            </Text>
           </View>
           <View style={styles.col}>
             <Text style={styles.label}>Asset Type</Text>
@@ -64,6 +67,12 @@ export const AssetDetailView: React.FC<AssetDetailViewProps> = ({ asset, role })
               {asset.manufacturer ? `${asset.manufacturer} ` : ''}{asset.model}
             </Text>
           </View>
+          {asset.serialNumber && asset.serialNumber !== 'N/A' && (
+            <View style={styles.col}>
+              <Text style={styles.label}>Serial Number</Text>
+              <Text style={[styles.value, styles.codeText]}>{asset.serialNumber}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.row}>
@@ -87,12 +96,12 @@ export const AssetDetailView: React.FC<AssetDetailViewProps> = ({ asset, role })
         </View>
       </View>
 
-      {/* If Guard and Outside, show Open OUT Movement info */}
+      {/* If Guard and Outside, show Open OUT Movement Info */}
       {asset.gatePresence === 'OUTSIDE' && asset.openOutMovement && (
         <View style={[styles.card, styles.movementCard]}>
           <View style={styles.cardHeader}>
             <Ionicons name="exit-outline" size={18} color={colors.amber} />
-            <Text style={[styles.cardTitle, { color: colors.amber }]}>Open Exit Record</Text>
+            <Text style={[styles.cardTitle, { color: colors.amber }]}>Active Exit Record</Text>
           </View>
           <View style={styles.row}>
             <View style={styles.col}>
@@ -133,22 +142,24 @@ export const AssetDetailView: React.FC<AssetDetailViewProps> = ({ asset, role })
         </View>
       )}
 
-      {/* ADMIN & MANAGER ONLY: Rich Specifications, Network, and Lifecycle */}
+      {/* ADMIN & MANAGER ONLY: Expandable Technical & Lifecycle Sections */}
       {!isSecurityGuard && full && (
-        <>
-          {/* Status & Governance */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="ribbon-outline" size={18} color={colors.cyan} />
-              <Text style={styles.cardTitle}>Status & Classification</Text>
-            </View>
+        <View style={styles.accordionContainer}>
+          {/* Classification & Allocation */}
+          <AccordionSection
+            title="Classification & Allocation"
+            icon="ribbon-outline"
+            badge={full.allocationStatus || 'ALLOCATED'}
+            badgeColor={colors.cyan}
+            initialExpanded={true}
+          >
             <View style={styles.row}>
               <View style={styles.col}>
-                <Text style={styles.label}>Asset Status</Text>
+                <Text style={styles.label}>Lifecycle Status</Text>
                 <Text style={styles.valueHighlight}>{full.status || 'AVAILABLE'}</Text>
               </View>
               <View style={styles.col}>
-                <Text style={styles.label}>Allocation</Text>
+                <Text style={styles.label}>Allocation Status</Text>
                 <Text style={styles.value}>{full.allocationStatus || 'ALLOCATED'}</Text>
               </View>
               <View style={styles.col}>
@@ -156,66 +167,119 @@ export const AssetDetailView: React.FC<AssetDetailViewProps> = ({ asset, role })
                 <Text style={styles.value}>{full.criticality || 'MEDIUM'}</Text>
               </View>
             </View>
-          </View>
+          </AccordionSection>
 
-          {/* Hardware & Network */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="hardware-chip-outline" size={18} color={colors.cyan} />
-              <Text style={styles.cardTitle}>Hardware & Network Specifications</Text>
-            </View>
+          {/* Hardware Specifications */}
+          <AccordionSection
+            title="Hardware Specifications"
+            icon="hardware-chip-outline"
+            badge={full.specifications?.cpu ? 'Configured' : undefined}
+          >
             <View style={styles.row}>
               <View style={styles.col}>
-                <Text style={styles.label}>CPU</Text>
+                <Text style={styles.label}>Processor (CPU)</Text>
                 <Text style={styles.value}>{full.specifications?.cpu || '—'}</Text>
               </View>
               <View style={styles.col}>
-                <Text style={styles.label}>RAM</Text>
+                <Text style={styles.label}>RAM Memory</Text>
                 <Text style={styles.value}>{full.specifications?.ram || '—'}</Text>
               </View>
+            </View>
+            <View style={styles.row}>
               <View style={styles.col}>
                 <Text style={styles.label}>Storage</Text>
                 <Text style={styles.value}>{full.specifications?.storage || '—'}</Text>
               </View>
+              <View style={styles.col}>
+                <Text style={styles.label}>Monitor</Text>
+                <Text style={styles.value}>{full.specifications?.monitor || 'Integrated Display'}</Text>
+              </View>
             </View>
+          </AccordionSection>
+
+          {/* Network Configuration */}
+          <AccordionSection
+            title="Network Configuration"
+            icon="wifi-outline"
+            badge={full.specifications?.lanIp || undefined}
+            badgeColor={colors.emerald}
+          >
             <View style={styles.row}>
               <View style={styles.col}>
                 <Text style={styles.label}>LAN IP Address</Text>
                 <Text style={[styles.value, styles.ipText]}>
-                  {full.specifications?.lanIp || '—'}
+                  {full.specifications?.lanIp || 'Not assigned'}
                 </Text>
               </View>
               <View style={styles.col}>
-                <Text style={styles.label}>LAN MAC Address</Text>
+                <Text style={styles.label}>MAC Address</Text>
                 <Text style={[styles.value, styles.codeText]}>
-                  {full.specifications?.lanMacAddress || '—'}
+                  {full.specifications?.lanMacAddress || 'Not registered'}
                 </Text>
               </View>
             </View>
-          </View>
+          </AccordionSection>
 
-          {/* Lifecycle & Warranty */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="shield-outline" size={18} color={colors.cyan} />
-              <Text style={styles.cardTitle}>Warranty & Maintenance</Text>
-            </View>
+          {/* Warranty & Lifecycle */}
+          <AccordionSection
+            title="Warranty Coverage"
+            icon="shield-outline"
+            badge={full.warrantyEnd ? 'Active' : 'Expired'}
+            badgeColor={full.warrantyEnd ? colors.emerald : colors.rose}
+          >
             <View style={styles.row}>
               <View style={styles.col}>
                 <Text style={styles.label}>Warranty End Date</Text>
                 <Text style={styles.value}>
-                  {full.warrantyEnd ? new Date(full.warrantyEnd).toLocaleDateString() : 'No active warranty'}
+                  {full.warrantyEnd ? new Date(full.warrantyEnd).toLocaleDateString() : 'No active warranty recorded'}
                 </Text>
               </View>
               <View style={styles.col}>
-                <Text style={styles.label}>Maintenance Records</Text>
+                <Text style={styles.label}>Purchase Date</Text>
                 <Text style={styles.value}>
-                  {full.maintenance?.length ? `${full.maintenance.length} records` : 'None'}
+                  {full.purchaseDate ? new Date(full.purchaseDate).toLocaleDateString() : '—'}
                 </Text>
               </View>
             </View>
-          </View>
-        </>
+          </AccordionSection>
+
+          {/* Gate Movement History */}
+          {full.gateMovements && full.gateMovements.length > 0 && (
+            <AccordionSection
+              title="Recent Physical Gate Movements"
+              icon="swap-vertical-outline"
+              badge={`${full.gateMovements.length} logs`}
+            >
+              <View style={styles.movementList}>
+                {full.gateMovements.slice(0, 4).map((m: any) => {
+                  const isOut = m.movementType === 'OUT';
+                  return (
+                    <View key={m.id} style={styles.historyRow}>
+                      <View style={styles.historyLeft}>
+                        <Ionicons
+                          name={isOut ? 'arrow-up-circle' : 'arrow-down-circle'}
+                          size={16}
+                          color={isOut ? colors.amber : colors.emerald}
+                        />
+                        <View>
+                          <Text style={[styles.historyType, { color: isOut ? colors.amber : colors.emerald }]}>
+                            {m.movementType} ({m.movementCode})
+                          </Text>
+                          <Text style={styles.historyDest} numberOfLines={1}>
+                            {m.destination || m.purpose || 'Premises passage'}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.historyTime}>
+                        {new Date(m.movementDateTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </AccordionSection>
+          )}
+        </View>
       )}
     </ScrollView>
   );
@@ -228,7 +292,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     gap: 12,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
   stateBanner: {
     flexDirection: 'row',
@@ -251,7 +315,7 @@ const styles = StyleSheet.create({
   },
   stateTitle: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
     color: colors.textPrimary,
     letterSpacing: 0.5,
   },
@@ -297,7 +361,8 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.textMuted,
     textTransform: 'uppercase',
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.3,
     marginBottom: 2,
   },
   value: {
@@ -308,7 +373,7 @@ const styles = StyleSheet.create({
   valueHighlight: {
     fontSize: 12,
     color: colors.cyan,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   codeText: {
     fontFamily: 'monospace',
@@ -317,5 +382,43 @@ const styles = StyleSheet.create({
   ipText: {
     fontFamily: 'monospace',
     color: colors.emeraldLight,
+    fontWeight: '600',
+  },
+  accordionContainer: {
+    marginTop: 4,
+  },
+  movementList: {
+    gap: 8,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 8,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  historyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  historyType: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: 'monospace',
+  },
+  historyDest: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    maxWidth: 180,
+  },
+  historyTime: {
+    fontSize: 10,
+    color: colors.textMuted,
+    fontFamily: 'monospace',
   },
 });

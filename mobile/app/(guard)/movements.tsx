@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Header } from '../../src/components/Header';
+import { PaginationFooter } from '../../src/components/PaginationFooter';
+import { EmptyState } from '../../src/components/EmptyState';
 import { securityGateApi } from '../../src/api/securityGate';
 import { GateMovementRecord } from '../../src/types';
 import { colors } from '../../src/theme/colors';
@@ -18,33 +21,82 @@ export default function GuardMovementsScreen() {
   const router = useRouter();
 
   const [movements, setMovements] = useState<GateMovementRecord[]>([]);
+  const [filterType, setFilterType] = useState<'ALL' | 'OUT' | 'IN'>('ALL');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const fetchMovements = async () => {
+  const fetchMovements = useCallback(async (p = 1, append = false, type = filterType) => {
     try {
-      setLoading(true);
-      const res = await securityGateApi.getMovements({ limit: 25 });
-      setMovements(res.movements || []);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+
+      const movementTypeParam = type === 'ALL' ? undefined : type;
+      const res = await securityGateApi.getMovements({
+        page: p,
+        limit: 15,
+        movementType: movementTypeParam,
+      });
+
+      const newRows: GateMovementRecord[] = res.movements || [];
+      const total = res.total || 0;
+      setTotalCount(total);
+
+      if (append) {
+        setMovements((prev) => {
+          // Deduplicate by stable ID
+          const existingIds = new Set(prev.map((m) => m.id));
+          const uniqueNew = newRows.filter((m) => !existingIds.has(m.id));
+          return [...prev, ...uniqueNew];
+        });
+      } else {
+        setMovements(newRows);
+      }
+
+      setHasMore(p * 15 < total);
     } catch (e) {
       console.error('Failed to fetch movements', e);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
       setRefreshing(false);
     }
-  };
+  }, [filterType]);
 
   useEffect(() => {
-    fetchMovements();
-  }, []);
+    setPage(1);
+    fetchMovements(1, false, filterType);
+  }, [filterType, fetchMovements]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchMovements();
+    setPage(1);
+    fetchMovements(1, false, filterType);
+  };
+
+  const loadMore = () => {
+    if (!loading && !loadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchMovements(nextPage, true, filterType);
+    }
+  };
+
+  const handleFilterChange = (type: 'ALL' | 'OUT' | 'IN') => {
+    if (type !== filterType) {
+      setFilterType(type);
+    }
   };
 
   const renderItem = ({ item }: { item: GateMovementRecord }) => {
     const isOut = item.movementType === 'OUT';
+
     return (
       <View style={styles.card}>
         <View style={styles.cardTop}>
@@ -55,8 +107,8 @@ export default function GuardMovementsScreen() {
             ]}
           >
             <Ionicons
-              name={isOut ? 'arrow-up-circle-outline' : 'arrow-down-circle-outline'}
-              size={12}
+              name={isOut ? 'arrow-up-circle' : 'arrow-down-circle'}
+              size={14}
               color={isOut ? colors.amber : colors.emerald}
             />
             <Text
@@ -65,22 +117,46 @@ export default function GuardMovementsScreen() {
                 { color: isOut ? colors.amber : colors.emerald },
               ]}
             >
-              {item.movementType}
+              {item.movementType === 'OUT' ? 'EXIT (OUT)' : 'ENTRY (IN)'}
             </Text>
           </View>
+
           <Text style={styles.movementCode}>{item.movementCode}</Text>
         </View>
 
         <Text style={styles.modelText}>
-          {item.asset?.assetCode} — {item.asset?.model}
-        </Text>
-        <Text style={styles.timeText}>
-          {new Date(item.movementDateTime).toLocaleString()} • {item.gate?.name || 'Gate'}
+          {item.asset?.assetCode} — {item.asset?.model || item.asset?.assetName}
         </Text>
 
+        <View style={styles.metaRow}>
+          <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+          <Text style={styles.metaText}>
+            {item.gate?.name || 'Gate Checkpoint'}
+          </Text>
+          <Text style={styles.metaDot}>•</Text>
+          <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+          <Text style={styles.metaText}>
+            {new Date(item.movementDateTime).toLocaleString([], {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </Text>
+        </View>
+
         {item.destination && (
-          <Text style={styles.destText} numberOfLines={1}>
-            {item.destination} {item.purpose ? `(${item.purpose})` : ''}
+          <View style={styles.destBox}>
+            <Text style={styles.destLabel}>Destination / Mission:</Text>
+            <Text style={styles.destText}>
+              {item.destination} {item.purpose ? `(${item.purpose})` : ''}
+            </Text>
+          </View>
+        )}
+
+        {item.remarks && (
+          <Text style={styles.remarksText} numberOfLines={1}>
+            Remarks: {item.remarks}
           </Text>
         )}
       </View>
@@ -89,19 +165,73 @@ export default function GuardMovementsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+      <Header
+        title="Gate Movement Ledger"
+        subtitle={`${totalCount} physical transactions logged`}
+        showBack={true}
+        onBack={() => router.back()}
+      />
+
+      {/* Filter Chips Bar */}
+      <View style={styles.filterBar}>
+        <TouchableOpacity
+          style={[styles.filterChip, filterType === 'ALL' && styles.filterChipActive]}
+          onPress={() => handleFilterChange('ALL')}
+        >
+          <Text style={[styles.filterChipText, filterType === 'ALL' && styles.filterChipTextActive]}>
+            All ({totalCount})
+          </Text>
         </TouchableOpacity>
-        <View style={styles.titleGroup}>
-          <Text style={styles.title}>Gate Movement Log</Text>
-          <Text style={styles.subtitle}>Recent physical check-ins and check-outs</Text>
-        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.filterChip,
+            filterType === 'OUT' && styles.filterChipActiveOut,
+          ]}
+          onPress={() => handleFilterChange('OUT')}
+        >
+          <Ionicons
+            name="arrow-up-circle"
+            size={13}
+            color={filterType === 'OUT' ? colors.amber : colors.textMuted}
+          />
+          <Text
+            style={[
+              styles.filterChipText,
+              filterType === 'OUT' && { color: colors.amber, fontWeight: '800' },
+            ]}
+          >
+            Exits (OUT)
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterChip,
+            filterType === 'IN' && styles.filterChipActiveIn,
+          ]}
+          onPress={() => handleFilterChange('IN')}
+        >
+          <Ionicons
+            name="arrow-down-circle"
+            size={13}
+            color={filterType === 'IN' ? colors.emerald : colors.textMuted}
+          />
+          <Text
+            style={[
+              styles.filterChipText,
+              filterType === 'IN' && { color: colors.emerald, fontWeight: '800' },
+            ]}
+          >
+            Returns (IN)
+          </Text>
+        </TouchableOpacity>
       </View>
 
-      {loading ? (
+      {loading && page === 1 ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={colors.cyan} />
+          <Text style={styles.loadingText}>Loading movement history...</Text>
         </View>
       ) : (
         <FlatList
@@ -109,12 +239,22 @@ export default function GuardMovementsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.listContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.cyan} />}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.cyan} />
+          }
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.35}
+          ListFooterComponent={
+            <PaginationFooter loading={loadingMore} hasMore={hasMore} itemCount={movements.length} />
+          }
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="file-tray-outline" size={48} color={colors.textMuted} />
-              <Text style={styles.emptyText}>No recent movements recorded.</Text>
-            </View>
+            <EmptyState
+              icon="time-outline"
+              title="No Movement Logs"
+              message={`No gate records found for filter: ${filterType}.`}
+              actionLabel="View All Logs"
+              onAction={() => setFilterType('ALL')}
+            />
           }
         />
       )}
@@ -127,51 +267,56 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
-  header: {
+  filterBar: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 14,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    width: 36,
-    height: 36,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 8,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  titleGroup: {
-    flex: 1,
+  filterChipActive: {
+    backgroundColor: colors.cardElevated,
+    borderColor: colors.cyan,
   },
-  title: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.textPrimary,
+  filterChipActiveOut: {
+    backgroundColor: colors.amberBg,
+    borderColor: colors.amberBorder,
   },
-  subtitle: {
+  filterChipActiveIn: {
+    backgroundColor: colors.emeraldBg,
+    borderColor: colors.emeraldBorder,
+  },
+  filterChipText: {
     fontSize: 11,
+    fontWeight: '600',
     color: colors.textSecondary,
-    marginTop: 1,
+  },
+  filterChipTextActive: {
+    color: colors.cyan,
+    fontWeight: '800',
   },
   listContent: {
     padding: 16,
-    gap: 10,
+    gap: 12,
   },
   card: {
     backgroundColor: colors.card,
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    gap: 6,
+    gap: 8,
   },
   cardTop: {
     flexDirection: 'row',
@@ -181,10 +326,10 @@ const styles = StyleSheet.create({
   movementBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
     borderWidth: 1,
   },
   badgeOut: {
@@ -198,39 +343,64 @@ const styles = StyleSheet.create({
   movementBadgeText: {
     fontSize: 10,
     fontWeight: '800',
+    letterSpacing: 0.5,
   },
   movementCode: {
     fontFamily: 'monospace',
-    fontSize: 10,
+    fontSize: 11,
     color: colors.textMuted,
+    fontWeight: '700',
   },
   modelText: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     color: colors.textPrimary,
   },
-  timeText: {
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  metaText: {
     fontSize: 11,
     color: colors.textSecondary,
+  },
+  metaDot: {
+    color: colors.textMuted,
+    marginHorizontal: 2,
+  },
+  destBox: {
+    backgroundColor: colors.surface,
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  destLabel: {
+    fontSize: 9,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    fontWeight: '700',
   },
   destText: {
     fontSize: 11,
     color: colors.cyanLight,
     marginTop: 2,
+    fontWeight: '500',
+  },
+  remarksText: {
+    fontSize: 10,
+    color: colors.textMuted,
+    fontStyle: 'italic',
   },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
   },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-    gap: 8,
-  },
-  emptyText: {
-    color: colors.textMuted,
-    fontSize: 13,
+  loadingText: {
+    fontSize: 12,
+    color: colors.textSecondary,
   },
 });

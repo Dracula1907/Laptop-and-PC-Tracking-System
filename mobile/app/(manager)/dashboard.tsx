@@ -9,7 +9,9 @@ import {
   Modal,
   ActivityIndicator,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Header } from '../../src/components/Header';
 import { MetricCard } from '../../src/components/MetricCard';
 import { QrScannerModal } from '../../src/components/QrScannerModal';
@@ -20,6 +22,9 @@ import { GateKPIs, ScannedAssetData } from '../../src/types';
 import { colors } from '../../src/theme/colors';
 
 export default function ManagerDashboard() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+
   const [kpis, setKpis] = useState<GateKPIs>({
     assetsOutside: 0,
     assetsInside: 0,
@@ -93,77 +98,62 @@ export default function ManagerDashboard() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.emerald} />}
       >
         {/* Quick QR Scanner Action */}
-        <TouchableOpacity style={styles.scanBanner} onPress={() => setScannerVisible(true)}>
+        <TouchableOpacity
+          style={styles.scanBanner}
+          onPress={() => setScannerVisible(true)}
+          activeOpacity={0.8}
+        >
           <View style={styles.scanIconBox}>
-            <Ionicons name="qr-code-outline" size={28} color={colors.textDark} />
+            <Ionicons name="qr-code-outline" size={26} color={colors.textDark} />
           </View>
           <View style={styles.scanTextGroup}>
-            <Text style={styles.scanTitle}>SCAN ASSET QR TAG</Text>
-            <Text style={styles.scanSubtitle}>Inspect asset allocation, specs & gate state</Text>
+            <Text style={styles.scanTitle}>SCAN DEPARTMENT ASSET</Text>
+            <Text style={styles.scanSubtitle}>
+              Inspect custody, physical presence, and specifications
+            </Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={colors.emerald} />
+          <Ionicons name="chevron-forward" size={18} color={colors.emerald} />
         </TouchableOpacity>
 
-        {/* Manager KPIs */}
-        <Text style={styles.sectionHeading}>DEPARTMENT INVENTORY STATUS</Text>
+        {/* Physical Security Gate Status */}
+        <Text style={styles.sectionHeading}>GATE MONITORING</Text>
         <View style={styles.metricsGrid}>
-          <View style={styles.metricsRow}>
-            <MetricCard
-              label="TOTAL MONITORED"
-              value={assetCounts.total || '—'}
-              subtitle="Registered assets"
-              icon="layers-outline"
-              color={colors.emerald}
-            />
-            <MetricCard
-              label="CURRENTLY OUTSIDE"
-              value={kpis.assetsOutside}
-              subtitle="Gate exits active"
-              icon="arrow-up-circle-outline"
-              color={colors.amber}
-              bg="rgba(245, 158, 11, 0.08)"
-              borderColor={colors.amberBorder}
-            />
-          </View>
-          <View style={styles.metricsRow}>
-            <MetricCard
-              label="INSIDE PREMISES"
-              value={kpis.assetsInside}
-              subtitle="On-site inventory"
-              icon="shield-checkmark-outline"
-              color={colors.emeraldLight}
-            />
-            <MetricCard
-              label="OVERDUE RETURNS"
-              value={kpis.overdueReturns}
-              subtitle="Requires follow-up"
-              icon="alert-circle-outline"
-              color={kpis.overdueReturns > 0 ? colors.rose : colors.textMuted}
-              bg={kpis.overdueReturns > 0 ? colors.roseBg : undefined}
-              borderColor={kpis.overdueReturns > 0 ? colors.roseBorder : undefined}
-            />
-          </View>
+          <MetricCard
+            label="ASSETS OUTSIDE"
+            value={kpis.assetsOutside}
+            subvalue={kpis.overdueReturns ? `${kpis.overdueReturns} Overdue` : undefined}
+            color={colors.amber}
+            icon="arrow-up-circle-outline"
+          />
+          <MetricCard
+            label="TODAY'S EXITS"
+            value={kpis.todayOut}
+            color={colors.cyan}
+            icon="exit-outline"
+          />
+          <MetricCard
+            label="TODAY'S RETURNS"
+            value={kpis.todayIn}
+            color={colors.emerald}
+            icon="enter-outline"
+          />
         </View>
 
-        {/* Manager Functional Modules */}
-        <Text style={styles.sectionHeading}>AUTHORIZED OPERATIONS</Text>
-        <View style={styles.modulesGrid}>
-          <View style={styles.moduleItem}>
-            <Ionicons name="people-outline" size={22} color={colors.emerald} />
-            <Text style={styles.moduleName}>Department Staff</Text>
-          </View>
-          <View style={styles.moduleItem}>
-            <Ionicons name="swap-horizontal-outline" size={22} color={colors.cyan} />
-            <Text style={styles.moduleName}>Asset Transfers</Text>
-          </View>
-          <View style={styles.moduleItem}>
-            <Ionicons name="checkmark-done-outline" size={22} color={colors.amber} />
-            <Text style={styles.moduleName}>Pending Approvals</Text>
-          </View>
-          <View style={styles.moduleItem}>
-            <Ionicons name="stats-chart-outline" size={22} color={colors.cyanLight} />
-            <Text style={styles.moduleName}>Department Reports</Text>
-          </View>
+        {/* Department Asset Stats */}
+        <Text style={styles.sectionHeading}>DEPARTMENT INVENTORY</Text>
+        <View style={styles.metricsGrid}>
+          <MetricCard
+            label="MANAGED ASSETS"
+            value={assetCounts.total}
+            color={colors.emerald}
+            icon="laptop-outline"
+          />
+          <MetricCard
+            label="CURRENTLY ACTIVE"
+            value={assetCounts.active}
+            color={colors.cyan}
+            icon="checkmark-circle-outline"
+          />
         </View>
       </ScrollView>
 
@@ -173,20 +163,20 @@ export default function ManagerDashboard() {
         onClose={() => setScannerVisible(false)}
         onScan={handleScan}
         title="Manager Asset Scanner"
-        subtitle="Align QR code to view authorized asset profile"
+        subtitle="Align QR code to inspect authorized department profile"
       />
 
-      {/* Loading Modal */}
+      {/* Scan Loading Modal */}
       {scanLoading && (
         <Modal transparent visible={scanLoading}>
-          <View style={styles.loadingOverlay}>
+          <View style={styles.modalOverlay}>
             <ActivityIndicator size="large" color={colors.emerald} />
-            <Text style={[styles.loadingText, { color: colors.emerald }]}>Resolving asset...</Text>
+            <Text style={styles.loadingText}>Verifying asset record...</Text>
           </View>
         </Modal>
       )}
 
-      {/* Error Modal */}
+      {/* Scan Error Modal */}
       {scanError && (
         <Modal transparent visible={!!scanError} onRequestClose={() => setScanError(null)}>
           <View style={styles.modalOverlay}>
@@ -202,7 +192,7 @@ export default function ManagerDashboard() {
         </Modal>
       )}
 
-      {/* Scanned Result Modal */}
+      {/* Scanned Full Asset Details Modal with Dynamic Safe Area */}
       {scannedAsset && (
         <Modal
           visible={!!scannedAsset}
@@ -210,7 +200,7 @@ export default function ManagerDashboard() {
           onRequestClose={() => setScannedAsset(null)}
         >
           <View style={styles.fullModalContainer}>
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top + 8, 20) }]}>
               <View>
                 <Text style={styles.modalHeaderTitle}>
                   {scannedAsset.companyAssetId || scannedAsset.assetCode}
@@ -222,6 +212,7 @@ export default function ManagerDashboard() {
               <TouchableOpacity
                 style={styles.modalCloseButton}
                 onPress={() => setScannedAsset(null)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons name="close" size={20} color={colors.textPrimary} />
               </TouchableOpacity>
@@ -278,8 +269,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   sectionHeading: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
     color: colors.textMuted,
     letterSpacing: 0.8,
     marginTop: 4,
@@ -287,62 +278,32 @@ const styles = StyleSheet.create({
   metricsGrid: {
     gap: 10,
   },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modulesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  moduleItem: {
-    width: '48%',
-    backgroundColor: colors.card,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    gap: 8,
-  },
-  moduleName: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  loadingOverlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(10, 13, 20, 0.85)',
     alignItems: 'center',
     justifyContent: 'center',
+    padding: 20,
     gap: 12,
   },
   loadingText: {
+    color: colors.emerald,
     fontSize: 13,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
+    fontWeight: '700',
   },
   alertCard: {
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 20,
+    padding: 24,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     width: '100%',
     maxWidth: 320,
   },
   alertTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.textPrimary,
   },
@@ -350,20 +311,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
   },
   closeAlertButton: {
     backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderLight,
     paddingVertical: 10,
     paddingHorizontal: 24,
     borderRadius: 8,
-    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    marginTop: 4,
   },
   closeAlertText: {
     color: colors.textPrimary,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
   fullModalContainer: {
@@ -375,7 +336,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 48,
     paddingBottom: 14,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
@@ -390,13 +350,16 @@ const styles = StyleSheet.create({
   modalHeaderSubtitle: {
     fontSize: 11,
     color: colors.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
   modalCloseButton: {
-    padding: 8,
+    width: 36,
+    height: 36,
     borderRadius: 8,
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
