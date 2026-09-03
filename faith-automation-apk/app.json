@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "Faith Automation IT Inventory",
+    "slug": "faith-automation-itinventory",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "faithautomation",
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#030309"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.faithautomation.itinventory"
+    },
+    "android": {
+      "package": "com.faithautomation.itinventory",
+      "versionCode": 1,
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#030309"
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Faith Automation IT Inventory requires camera access to scan physical asset QR identity tags at security gates and checkpoints."
+        }
+      ],
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "076dd838-4ca7-470d-ba79-cc148101ab35"
+      }
+    },
+    "owner": "omkar1907"
+  }
+}

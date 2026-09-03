@@ -2,8 +2,8 @@ const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
 
-const url = 'exp://192.168.1.7:8081';
-const artifactDir = 'C:\\Users\\Omkar Satpute\\.gemini\\antigravity-ide\\brain\\20589644-421e-40f8-b271-208c0af605dd';
+const url = 'exp://xahpi-e-omkar1907-8081.exp.direct';
+const artifactDir = 'C:\\Users\\Omkar Satpute\\.gemini\\antigravity-ide\\brain\\ec9f7304-7857-43da-b9b2-9ecbc57e31cb';
 const pngPath = path.join(artifactDir, 'expo_qr.png');
 const localPng = path.join(__dirname, '..', 'expo_qr.png');
 

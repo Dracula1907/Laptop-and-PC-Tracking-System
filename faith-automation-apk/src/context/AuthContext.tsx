@@ -36,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await clearStoredSession();
     } catch (err) {
-      console.warn('Error clearing stored session:', err);
+      console.warn('Error clearing session:', err);
     } finally {
       setActiveToken(null);
       setUser(null);
@@ -64,12 +64,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             await setStoredUser(currentUser);
           } catch (err: any) {
             if (err?.response?.status === 401) {
-              console.warn('Session invalid or expired (401), resetting session.');
+              console.warn('Session expired (401) — clearing session.');
               await clearStoredSession();
               setUser(null);
               setToken(null);
             } else {
-              console.warn('Server offline during restore, checking cached user credentials.');
+              // Network issue — use cached user to keep user logged in offline
+              console.warn('Network issue during restore — using cached credentials.');
               const cachedUser = await getStoredUser();
               if (cachedUser) {
                 setUser(cachedUser);
@@ -85,7 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setToken(null);
         }
       } catch (err) {
-        console.warn('Session restoration failed:', err);
+        console.warn('Session restore failed:', err);
         await clearStoredSession();
         setUser(null);
         setToken(null);
@@ -127,8 +128,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

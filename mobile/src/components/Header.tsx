@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -10,6 +10,7 @@ interface HeaderProps {
   title?: string;
   subtitle?: string;
   showLogout?: boolean;
+  showProfile?: boolean;
   showBack?: boolean;
   onBack?: () => void;
   rightAction?: React.ReactNode;
@@ -19,11 +20,12 @@ export const Header: React.FC<HeaderProps> = ({
   title = 'Faith IT Inventory',
   subtitle,
   showLogout = true,
+  showProfile = true,
   showBack = false,
   onBack,
   rightAction,
 }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, isLoggingOut } = useAuth();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
@@ -33,6 +35,26 @@ export const Header: React.FC<HeaderProps> = ({
     } else {
       router.back();
     }
+  };
+
+  const handleLogoutPress = () => {
+    if (isLoggingOut) return;
+
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const getRoleBadgeStyle = (role?: string) => {
@@ -64,12 +86,20 @@ export const Header: React.FC<HeaderProps> = ({
               <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
             </TouchableOpacity>
           ) : (
-            <View style={styles.brandIconContainer}>
+            <TouchableOpacity
+              style={styles.brandIconContainer}
+              onPress={() => user && router.push('/profile' as any)}
+              activeOpacity={user ? 0.7 : 1}
+            >
               <Ionicons name="laptop-outline" size={18} color={colors.cyan} />
-            </View>
+            </TouchableOpacity>
           )}
 
-          <View style={styles.textContainer}>
+          <TouchableOpacity
+            style={styles.textContainer}
+            onPress={() => user && router.push('/profile' as any)}
+            activeOpacity={user ? 0.7 : 1}
+          >
             <Text style={styles.brandTitle} numberOfLines={1}>
               {title}
             </Text>
@@ -87,20 +117,36 @@ export const Header: React.FC<HeaderProps> = ({
                 </View>
               </View>
             ) : null}
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.rightActions}>
           {rightAction}
 
-          {showLogout && user && (
+          {showProfile && user && (
             <TouchableOpacity
-              style={styles.logoutButton}
-              onPress={logout}
-              accessibilityLabel="Logout"
+              style={styles.actionButton}
+              onPress={() => router.push('/profile' as any)}
+              accessibilityLabel="Account Profile"
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
-              <Ionicons name="log-out-outline" size={18} color={colors.textSecondary} />
+              <Ionicons name="person-circle-outline" size={20} color={colors.cyan} />
+            </TouchableOpacity>
+          )}
+
+          {showLogout && user && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.logoutButton]}
+              onPress={handleLogoutPress}
+              disabled={isLoggingOut}
+              accessibilityLabel="Sign out"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              {isLoggingOut ? (
+                <ActivityIndicator size="small" color={colors.rose} />
+              ) : (
+                <Ionicons name="log-out-outline" size={18} color={colors.rose} />
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -190,7 +236,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  logoutButton: {
+  actionButton: {
     width: 36,
     height: 36,
     borderRadius: 8,
@@ -199,5 +245,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  logoutButton: {
+    borderColor: colors.roseBorder,
+    backgroundColor: colors.roseBg,
   },
 });

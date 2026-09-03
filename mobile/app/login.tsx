@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  BackHandler,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,9 +25,35 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { login } = useAuth();
+  const { login, user, isLoading } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+
+  // Prevent Android hardware back button from accessing any screen behind Login
+  useEffect(() => {
+    const onBackPress = () => {
+      BackHandler.exitApp();
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => subscription.remove();
+  }, []);
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (!isLoading && user) {
+      if (user.roleCode === 'ADMIN') {
+        router.replace('/(admin)/dashboard');
+      } else if (user.roleCode === 'MANAGER') {
+        router.replace('/(manager)/dashboard');
+      } else if (user.roleCode === 'SECURITY_GUARD') {
+        router.replace('/(guard)/home');
+      } else {
+        router.replace('/(admin)/dashboard');
+      }
+    }
+  }, [user, isLoading]);
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -170,7 +197,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.presetButton}
-                onPress={() => setPreset('manager', 'admin123')}
+                onPress={() => setPreset('manager', 'manager123')}
               >
                 <Text style={styles.presetButtonText}>Manager</Text>
               </TouchableOpacity>
