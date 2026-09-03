@@ -566,6 +566,10 @@ export const AssetDetail: React.FC = () => {
         return { label: 'Deactivated', color: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30', dot: 'bg-zinc-500' };
       case 'CORRECTION_RECORDED':
         return { label: 'Correction', color: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30', dot: 'bg-yellow-500' };
+      case 'ASSET_GATE_EXIT':
+        return { label: 'Gate Exit (OUT)', color: 'bg-amber-500/10 text-amber-400 border-amber-500/30', dot: 'bg-amber-500' };
+      case 'ASSET_GATE_ENTRY':
+        return { label: 'Gate Entry (IN)', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-500' };
       default:
         return { label: action.replace(/_/g, ' '), color: 'bg-zinc-800 text-zinc-300 border-zinc-700', dot: 'bg-zinc-400' };
     }
@@ -1392,6 +1396,7 @@ export const AssetDetail: React.FC = () => {
                       { value: 'ASSIGNED,ASSET_ASSIGNED,ASSIGNMENT_UPDATED', label: 'Assignments' },
                       { value: 'TRANSFERRED,ASSET_TRANSFERRED', label: 'Transfers' },
                       { value: 'RETURNED,ASSET_RETURNED,ASSET_RETURN_INITIATED', label: 'Returns' },
+                      { value: 'ASSET_GATE_EXIT,ASSET_GATE_ENTRY', label: 'Security Gate (OUT / IN)' },
                       { value: 'MAINTENANCE_OPENED,MAINTENANCE_STARTED,MAINTENANCE_UPDATED,MAINTENANCE_COMPLETED', label: 'Maintenance' },
                       { value: 'HARDWARE_CHANGED', label: 'Hardware Changes' },
                       { value: 'STATUS_CHANGED,CONDITION_CHANGED', label: 'Status / Condition' },
@@ -2066,6 +2071,11 @@ export const AssetDetail: React.FC = () => {
                           ? 'CURRENTLY OUTSIDE PREMISES'
                           : 'VERIFIED INSIDE PREMISES'}
                       </div>
+                      {asset.gatePresence === 'OUTSIDE' && lastMovement && lastMovement.action === 'ASSET_GATE_EXIT' && (
+                        <p className="text-xs text-amber-200/90 font-sans mt-0.5">
+                          {lastMovement.remarks}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <button

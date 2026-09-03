@@ -36,6 +36,20 @@ import {
   ScannedAssetData,
 } from '../types';
 
+// Robust helper to extract API response data whether unwrapped by Axios interceptor or not
+function unpackApiResponse<T = any>(res: any): { success: boolean; data: T; message?: string } {
+  const success = Boolean(res?.success ?? res?.data?.success);
+  let data: any = res?.data;
+  if (data !== undefined && data !== null && typeof data === 'object' && 'data' in data && 'success' in data) {
+    data = data.data;
+  }
+  if (data === undefined) {
+    data = res;
+  }
+  const message = res?.message ?? res?.data?.message;
+  return { success, data, message };
+}
+
 export const SecurityGate: React.FC = () => {
   const { showToast } = useToast();
 
@@ -120,9 +134,10 @@ export const SecurityGate: React.FC = () => {
     setInspectedAssetId(assetId);
     setInspectLoading(true);
     try {
-      const res = await api.get(`/assets/${assetId}`);
-      if (res.data.success) {
-        setInspectedAsset(res.data.data);
+      const raw = await api.get(`/assets/${assetId}`);
+      const res = unpackApiResponse(raw);
+      if (res.success && res.data) {
+        setInspectedAsset(res.data);
       }
     } catch (err) {
       showToast('Failed to load asset details', 'error');
@@ -135,9 +150,10 @@ export const SecurityGate: React.FC = () => {
   useEffect(() => {
     const pollInterval = setInterval(async () => {
       try {
-        const res = await api.get('/security-gate/last-movement');
-        if (res.data.success && res.data.data) {
-          const latestId = res.data.data.id;
+        const raw = await api.get('/security-gate/last-movement');
+        const res = unpackApiResponse(raw);
+        if (res.success && res.data?.id) {
+          const latestId = res.data.id;
           if (lastMovementIdRef.current && lastMovementIdRef.current !== latestId) {
             // New movement detected! Auto refresh view smoothly
             fetchKPIs();
@@ -191,9 +207,10 @@ export const SecurityGate: React.FC = () => {
   const fetchKPIs = async () => {
     try {
       setKpiLoading(true);
-      const res = await api.get('/security-gate/kpis');
-      if (res.data.success) {
-        setKpis(res.data.data);
+      const raw = await api.get('/security-gate/kpis');
+      const res = unpackApiResponse<GateKPIs>(raw);
+      if (res.success && res.data) {
+        setKpis(res.data);
       }
     } catch (err: any) {
       console.error('Failed to load gate KPIs', err);
@@ -205,12 +222,13 @@ export const SecurityGate: React.FC = () => {
   const fetchGates = async () => {
     try {
       setGatesLoading(true);
-      const res = await api.get('/gates');
-      if (res.data.success) {
-        setGates(res.data.data);
-        if (res.data.data.length > 0 && !outForm.gateId) {
-          setOutForm((prev) => ({ ...prev, gateId: res.data.data[0].id }));
-          setInForm((prev) => ({ ...prev, gateId: res.data.data[0].id }));
+      const raw = await api.get('/gates');
+      const res = unpackApiResponse<GateMaster[]>(raw);
+      if (res.success && Array.isArray(res.data)) {
+        setGates(res.data);
+        if (res.data.length > 0 && !outForm.gateId) {
+          setOutForm((prev) => ({ ...prev, gateId: res.data[0].id }));
+          setInForm((prev) => ({ ...prev, gateId: res.data[0].id }));
         }
       }
     } catch (err) {
@@ -223,12 +241,13 @@ export const SecurityGate: React.FC = () => {
   const fetchOutsideAssets = async () => {
     try {
       setOutsideLoading(true);
-      const res = await api.get('/security-gate/current-outside', {
+      const raw = await api.get('/security-gate/current-outside', {
         params: { page: outsidePage, limit: 15, search: outsideSearch },
       });
-      if (res.data.success) {
-        setOutsideAssets(res.data.data.rows);
-        setOutsideTotalPages(res.data.data.totalPages || 1);
+      const res = unpackApiResponse(raw);
+      if (res.success && res.data) {
+        setOutsideAssets(res.data.rows || []);
+        setOutsideTotalPages(res.data.totalPages || 1);
       }
     } catch (err) {
       showToast('Failed to load current outside assets', 'error');
@@ -240,7 +259,7 @@ export const SecurityGate: React.FC = () => {
   const fetchMovementHistory = async () => {
     try {
       setMovementLoading(true);
-      const res = await api.get('/security-gate/history', {
+      const raw = await api.get('/security-gate/history', {
         params: {
           page: historyPage,
           limit: 15,
@@ -251,9 +270,10 @@ export const SecurityGate: React.FC = () => {
           endDate: historyEndDate || undefined,
         },
       });
-      if (res.data.success) {
-        setMovements(res.data.data.movements);
-        setHistoryTotalPages(res.data.data.totalPages || 1);
+      const res = unpackApiResponse(raw);
+      if (res.success && res.data) {
+        setMovements(res.data.movements || []);
+        setHistoryTotalPages(res.data.totalPages || 1);
       }
     } catch (err) {
       showToast('Failed to load gate movement history', 'error');
@@ -265,11 +285,12 @@ export const SecurityGate: React.FC = () => {
   const fetchDailyRegister = async () => {
     try {
       setDailyLoading(true);
-      const res = await api.get('/security-gate/daily-register', {
+      const raw = await api.get('/security-gate/daily-register', {
         params: { date: dailyDate },
       });
-      if (res.data.success) {
-        setDailyRegister(res.data.data);
+      const res = unpackApiResponse<any[]>(raw);
+      if (res.success && Array.isArray(res.data)) {
+        setDailyRegister(res.data);
       }
     } catch (err) {
       showToast('Failed to load daily register', 'error');
@@ -327,14 +348,19 @@ export const SecurityGate: React.FC = () => {
       setScanning(true);
       setScanError(null);
       const token = rawToken.trim();
-      const res = await api.post('/security-gate/scan', { token });
-      if (res.data.success) {
-        setScannedAsset(res.data.data);
+      const raw = await api.post('/security-gate/scan', { token });
+      const res = unpackApiResponse<ScannedAssetData>(raw);
+      if (res.success && res.data) {
+        setScannedAsset(res.data);
         setScannerTokenInput('');
-        showToast(`Asset verified: ${res.data.data.assetCode}`, 'success');
+        showToast(`Asset verified: ${res.data.assetCode}`, 'success');
+      } else {
+        const msg = res.message || 'Asset not found or token invalid.';
+        setScanError(msg);
+        showToast(msg, 'error');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Failed to scan QR token.';
+      const msg = err.response?.data?.message || err.message || 'Failed to scan QR token.';
       setScanError(msg);
       setScannedAsset(null);
       showToast(msg, 'error');
@@ -361,7 +387,7 @@ export const SecurityGate: React.FC = () => {
 
     try {
       setActionLoading(true);
-      const res = await api.post('/security-gate/out', {
+      const raw = await api.post('/security-gate/out', {
         assetId: scannedAsset.assetId,
         qrCodeId: scannedAsset.qrId,
         gateId: outForm.gateId || undefined,
@@ -370,16 +396,18 @@ export const SecurityGate: React.FC = () => {
         expectedReturn: outForm.expectedReturn || undefined,
         remarks: outForm.remarks.trim() || undefined,
       });
+      const res = unpackApiResponse(raw);
 
-      if (res.data.success) {
-        showToast(res.data.message || 'Asset checked OUT successfully!', 'success');
+      if (res.success) {
+        showToast(res.message || 'Asset checked OUT successfully!', 'success');
         setShowOutModal(false);
         setScannedAsset(null);
         fetchKPIs();
         if (operationsTab === 'outside') fetchOutsideAssets();
+        if (operationsTab === 'history') fetchMovementHistory();
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to record asset exit.', 'error');
+      showToast(err.response?.data?.message || err.message || 'Failed to record asset exit.', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -392,22 +420,24 @@ export const SecurityGate: React.FC = () => {
 
     try {
       setActionLoading(true);
-      const res = await api.post('/security-gate/in', {
+      const raw = await api.post('/security-gate/in', {
         assetId: scannedAsset.assetId,
         qrCodeId: scannedAsset.qrId,
         gateId: inForm.gateId || undefined,
         remarks: inForm.remarks.trim() || undefined,
       });
+      const res = unpackApiResponse(raw);
 
-      if (res.data.success) {
-        showToast(res.data.message || 'Asset checked IN successfully!', 'success');
+      if (res.success) {
+        showToast(res.message || 'Asset checked IN successfully!', 'success');
         setShowInModal(false);
         setScannedAsset(null);
         fetchKPIs();
         if (operationsTab === 'outside') fetchOutsideAssets();
+        if (operationsTab === 'history') fetchMovementHistory();
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to record asset return.', 'error');
+      showToast(err.response?.data?.message || err.message || 'Failed to record asset return.', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -422,15 +452,16 @@ export const SecurityGate: React.FC = () => {
     }
 
     try {
-      const res = await api.post('/gates', gateForm);
-      if (res.data.success) {
+      const raw = await api.post('/gates', gateForm);
+      const res = unpackApiResponse(raw);
+      if (res.success) {
         showToast('Physical gate created successfully.', 'success');
         setShowGateModal(false);
         setGateForm({ name: '', code: '', location: '' });
         fetchGates();
       }
     } catch (err: any) {
-      showToast(err.response?.data?.message || 'Failed to create gate.', 'error');
+      showToast(err.response?.data?.message || err.message || 'Failed to create gate.', 'error');
     }
   };
 
