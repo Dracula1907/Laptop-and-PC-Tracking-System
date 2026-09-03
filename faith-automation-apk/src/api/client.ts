@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 import { UserSession } from '../types';
 
 // Configurable API base URL — live HTTPS tunnel default
-export const DEFAULT_API_URL = 'https://cce75b121693c9.lhr.life/api';
+export const DEFAULT_API_URL = 'https://b9ee3aad0f9fe4.lhr.life/api';
 export const API_URL_KEY = 'fa_itam_api_url';
 export const TOKEN_KEY = 'fa_itam_token';
 export const USER_KEY = 'fa_itam_user';
