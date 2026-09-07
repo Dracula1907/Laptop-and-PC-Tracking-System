@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Header } from '../src/components/Header';
 import { useAuth } from '../src/context/AuthContext';
 import { colors } from '../src/theme/colors';
-import { API_BASE_URL } from '../src/api/client';
+import { getApiBaseUrl } from '../src/api/client';
 
 export default function ProfileScreen() {
   const { user, logout, isLoggingOut } = useAuth();
@@ -174,7 +174,7 @@ export default function ProfileScreen() {
 
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Server URL</Text>
-            <Text style={styles.detailValueMono} numberOfLines={1}>{API_BASE_URL}</Text>
+            <Text style={styles.detailValueMono} numberOfLines={1}>{getApiBaseUrl()}</Text>
           </View>
         </View>
 

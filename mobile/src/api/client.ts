@@ -3,21 +3,88 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { UserSession } from '../types';
 
-// Configurable API base URL, defaulting to local network IP
-const DEFAULT_API_URL = 'http://192.168.1.7:5000/api';
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
+// Configurable API base URL — live HTTPS tunnel default
+export const DEFAULT_API_URL = 'https://868d0b49512ae3.lhr.life/api';
+export const LAN_API_URL = 'http://192.168.100.88:5000/api';
+export const API_URL_KEY = 'faith_itam_api_url';
+export const TOKEN_KEY = 'faith_itam_token';
+export const USER_KEY = 'faith_itam_user';
+
+let currentBaseUrl: string = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
+export let API_BASE_URL = currentBaseUrl;
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: currentBaseUrl,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Secure token storage helpers with web/platform fallback
-export const TOKEN_KEY = 'faith_itam_token';
-export const USER_KEY = 'faith_itam_user';
+export function getApiBaseUrl(): string {
+  return currentBaseUrl;
+}
+
+export function setApiBaseUrl(newUrl: string): void {
+  let formatted = newUrl.trim();
+  if (formatted.endsWith('/')) {
+    formatted = formatted.slice(0, -1);
+  }
+  if (!formatted.endsWith('/api')) {
+    formatted = `${formatted}/api`;
+  }
+  currentBaseUrl = formatted;
+  API_BASE_URL = formatted;
+  apiClient.defaults.baseURL = formatted;
+}
+
+export async function getStoredApiUrl(): Promise<string> {
+  try {
+    const stored =
+      Platform.OS === 'web'
+        ? localStorage.getItem(API_URL_KEY)
+        : await SecureStore.getItemAsync(API_URL_KEY);
+    if (stored && stored.trim()) {
+      setApiBaseUrl(stored.trim());
+      return currentBaseUrl;
+    }
+  } catch (e) {
+    console.warn('Failed to get stored API URL', e);
+  }
+  return currentBaseUrl;
+}
+
+export async function saveStoredApiUrl(url: string): Promise<void> {
+  setApiBaseUrl(url);
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.setItem(API_URL_KEY, currentBaseUrl);
+    } else {
+      await SecureStore.setItemAsync(API_URL_KEY, currentBaseUrl);
+    }
+  } catch (e) {
+    console.warn('Failed to save API URL to storage', e);
+  }
+}
+
+export async function testConnection(customUrl?: string): Promise<{ success: boolean; latencyMs?: number; message: string }> {
+  let target = (customUrl || currentBaseUrl).trim();
+  if (target.endsWith('/')) target = target.slice(0, -1);
+  if (!target.endsWith('/api')) target = `${target}/api`;
+  const healthUrl = `${target}/health`;
+  const start = Date.now();
+  try {
+    const res = await axios.get(healthUrl, { timeout: 8000 });
+    const latency = Date.now() - start;
+    if (res.status === 200) {
+      return { success: true, latencyMs: latency, message: `Connected successfully (${latency}ms)` };
+    }
+    return { success: false, message: `Server responded with HTTP ${res.status}` };
+  } catch (err: any) {
+    const msg = err?.response?.data?.message || err?.message || 'Connection timed out';
+    return { success: false, message: msg };
+  }
+}
 
 // In-memory active token for synchronous interceptor access & instant invalidation
 let activeToken: string | null = null;

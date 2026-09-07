@@ -285,7 +285,7 @@ export default function LoginScreen() {
               <Text style={styles.fieldLabel}>API BASE URL</Text>
               <TextInput
                 style={styles.serverInput}
-                placeholder="http://192.168.1.7:5000/api"
+                placeholder="https://868d0b49512ae3.lhr.life/api"
                 placeholderTextColor={colors.textMuted}
                 value={serverUrlInput}
                 onChangeText={(v) => {
@@ -295,6 +295,37 @@ export default function LoginScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+            </View>
+
+            {/* Quick Presets */}
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderCyan, alignItems: 'center' }}
+                onPress={() => {
+                  setServerUrlInput(DEFAULT_API_URL);
+                  setConnectionResult(null);
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.cyanLight }}>Public Tunnel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}
+                onPress={() => {
+                  setServerUrlInput('http://192.168.100.88:5000/api');
+                  setConnectionResult(null);
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.emeraldLight }}>Wi-Fi LAN</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, paddingVertical: 6, borderRadius: 6, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center' }}
+                onPress={() => {
+                  setServerUrlInput('http://10.0.2.2:5000/api');
+                  setConnectionResult(null);
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.amberLight }}>Emulator</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Connection Test Result */}
