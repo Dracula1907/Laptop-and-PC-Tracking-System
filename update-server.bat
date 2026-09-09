@@ -22,11 +22,9 @@ set "HEALTH_RETRIES=20"
 set "HEALTH_DELAY=3"
 
 REM Auto-detect directory if running inside the repository directory
-if not exist "%PROJECT_DIR%" (
-    if exist "%~dp0docker-compose.yml" (
-        set "PROJECT_DIR=%~dp0"
-        if "!PROJECT_DIR:~-1!"=="\" set "PROJECT_DIR=!PROJECT_DIR:~0,-1!"
-    )
+if exist "%~dp0docker-compose.yml" (
+    set "PROJECT_DIR=%~dp0"
+    if "!PROJECT_DIR:~-1!"=="\" set "PROJECT_DIR=!PROJECT_DIR:~0,-1!"
 )
 
 REM Setup logging directory early
