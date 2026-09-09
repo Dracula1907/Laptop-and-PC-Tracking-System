@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
+import { TablePaginationFooter } from '../components/TablePaginationFooter';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -236,6 +237,16 @@ export const WarrantyManagement: React.FC = () => {
     setActiveTab(tab);
     setPage(1);
     setSearch('');
+  };
+
+  // Reset page to 1 on search, filter, or tab change
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, warrantyTypeFilter, providerFilter, expiryRangeFilter, activeTab]);
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
+    setPage(1);
   };
 
   // Reset Filters
@@ -505,7 +516,7 @@ export const WarrantyManagement: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-12 sm:pb-16">
       {/* Header */}
       <PageHeader
         title="Warranty & Contract Management"
@@ -1008,35 +1019,17 @@ export const WarrantyManagement: React.FC = () => {
           )}
         </div>
 
-        {/* Server-side pagination */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-[#1E2535] bg-[#0A0D15]/60 text-xs text-slate-400">
-          <div>
-            Showing <strong className="text-white">{(page - 1) * limit + 1}</strong> to{' '}
-            <strong className="text-white">{Math.min(page * limit, totalRecords)}</strong> of{' '}
-            <strong className="text-white">{totalRecords}</strong> records
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-            <span className="font-mono text-slate-300 px-2">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        {/* Server-side pagination footer */}
+        <TablePaginationFooter
+          currentPage={page}
+          totalPages={totalPages}
+          totalRecords={totalRecords}
+          limit={limit}
+          onPageChange={setPage}
+          onLimitChange={handleLimitChange}
+          pageSizeOptions={[25, 50, 100]}
+          recordLabel={activeTab === 'claims' ? 'warranty claims' : 'warranties'}
+        />
       </div>
 
       {/* ADD WARRANTY MODAL WIZARD (3 Steps) */}

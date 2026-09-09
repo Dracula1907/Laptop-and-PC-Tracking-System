@@ -11,6 +11,8 @@ router.get('/', ApprovalController.getApprovals);
 router.get('/policies', ApprovalController.getPolicies);
 router.put('/policies/:type', requirePermission('SETTINGS_MANAGE'), ApprovalController.updatePolicy);
 router.get('/:id', ApprovalController.getApprovalById);
+router.put('/:id', ApprovalController.update);
+router.delete('/:id', ApprovalController.delete);
 router.post('/:id/approve', ApprovalController.approve);
 router.post('/:id/reject', ApprovalController.reject);
 router.post('/:id/request-changes', ApprovalController.requestChanges);

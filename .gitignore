@@ -22,11 +22,13 @@ build/
 postgres_data/
 backend/prisma/*.db
 backend/prisma/*.db-journal
+backups/
 
 # Logs
 logs/
 *.log
 npm-debug.log*
+deployment-logs/
 
 # System
 .DS_Store

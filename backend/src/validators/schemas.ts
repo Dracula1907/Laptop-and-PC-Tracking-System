@@ -10,6 +10,7 @@ import {
   WarrantyType,
   CoverageStatus,
   ClaimStatus,
+  ApprovalPriority,
 } from '@prisma/client';
 
 export const LoginSchema = z.object({
@@ -453,6 +454,19 @@ export const ApprovalResubmitSchema = z.object({
 
 export const ApprovalCancellationSchema = z.object({
   cancellationReason: z.string().min(1, 'Cancellation reason is required'),
+});
+
+export const ApprovalUpdateSchema = z.object({
+  priority: z.nativeEnum(ApprovalPriority).optional(),
+  reason: z.string().optional(),
+  comments: z.string().optional(),
+  targetDepartmentId: z.string().nullable().optional(),
+  proposedChanges: z.any().optional(),
+});
+
+export const ApprovalDeleteSchema = z.object({
+  reason: z.string().optional(),
+  forceDelete: z.boolean().optional(),
 });
 
 export const ApprovalPolicyUpdateSchema = z.object({

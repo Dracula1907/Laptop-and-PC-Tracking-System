@@ -32,7 +32,7 @@ import {
 import { PageHeader } from '../components/PageHeader';
 import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
-import { Pagination } from '../components/Pagination';
+import { TablePaginationFooter } from '../components/TablePaginationFooter';
 import { SearchInput } from '../components/SearchInput';
 import { Select } from '../components/Select';
 import { useAuth } from '../contexts/AuthContext';
@@ -719,7 +719,7 @@ export const Returns: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12 sm:pb-16">
       {/* Page Header */}
       <PageHeader
         title="Asset Returns & Recovery"
@@ -989,9 +989,9 @@ export const Returns: React.FC = () => {
         </div>
       </div>
 
-      {/* 15 Standard Columns Table with Internal Horizontal Scrolling */}
-      <div className="relative">
-        <div className="w-full overflow-x-auto rounded-xl border border-borderBase shadow-card">
+      {/* 15 Standard Columns Table with Integrated Non-Scrolling Footer */}
+      <div className="relative rounded-xl border border-[#222E3E] light:border-slate-200 bg-[#0E1422] light:bg-white shadow-card overflow-hidden transition-colors">
+        <div className="w-full overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm min-w-[1450px]">
             <thead>
               <tr className="bg-surfaceElevated/80 border-b border-borderBase text-xs font-semibold text-textSecondary uppercase tracking-wider select-none font-mono">
@@ -1320,18 +1320,19 @@ export const Returns: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* Pagination Controls */}
-      <Pagination
-        currentPage={pagination.page}
-        totalPages={pagination.totalPages}
-        totalRecords={pagination.total}
-        limit={pagination.limit}
-        onPageChange={handlePageChange}
-        onLimitChange={handleLimitChange}
-        pageSizeOptions={[25, 50, 100]}
-      />
+        {/* Integrated Pagination Footer */}
+        <TablePaginationFooter
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalRecords={pagination.total}
+          limit={pagination.limit}
+          onPageChange={handlePageChange}
+          onLimitChange={handleLimitChange}
+          pageSizeOptions={[25, 50, 100]}
+          recordLabel="returns"
+        />
+      </div>
 
       {/* ── MODAL 1: Create Return (With Live CURRENT ASSET STATE Preview) ── */}
       {isCreateModalOpen && (

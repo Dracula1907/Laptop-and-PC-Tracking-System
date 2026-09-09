@@ -7,6 +7,8 @@ import {
   ApprovalRequestChangesSchema,
   ApprovalResubmitSchema,
   ApprovalCancellationSchema,
+  ApprovalUpdateSchema,
+  ApprovalDeleteSchema,
   ApprovalPolicyUpdateSchema,
 } from '../validators/schemas';
 
@@ -104,7 +106,7 @@ export class ApprovalController {
   static async resubmit(req: any, res: Response, next: NextFunction) {
     try {
       const validated = ApprovalResubmitSchema.parse(req.body);
-      const data = await ApprovalService.resubmitRequest(req.params.id, validated, req.user.id);
+      const data = await ApprovalService.resubmitRequest(req.params.id, validated, req.user);
       res.json({
         success: true,
         message: 'Proposal revised and resubmitted for review.',
@@ -121,11 +123,45 @@ export class ApprovalController {
   static async cancel(req: any, res: Response, next: NextFunction) {
     try {
       const validated = ApprovalCancellationSchema.parse(req.body);
-      const data = await ApprovalService.cancelRequest(req.params.id, validated, req.user.id);
+      const data = await ApprovalService.cancelRequest(req.params.id, validated, req.user);
       res.json({
         success: true,
         message: 'Approval request cancelled.',
         data,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * PUT /api/approvals/:id
+   */
+  static async update(req: any, res: Response, next: NextFunction) {
+    try {
+      const validated = ApprovalUpdateSchema.parse(req.body);
+      const data = await ApprovalService.updateApprovalRequest(req.params.id, validated, req.user);
+      res.json({
+        success: true,
+        message: 'Approval request details updated successfully.',
+        data,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * DELETE /api/approvals/:id
+   */
+  static async delete(req: any, res: Response, next: NextFunction) {
+    try {
+      const validated = ApprovalDeleteSchema.parse(req.body || {});
+      const result = await ApprovalService.deleteApprovalRequest(req.params.id, validated, req.user);
+      res.json({
+        success: true,
+        message: result.message,
+        data: result.data,
       });
     } catch (err) {
       next(err);

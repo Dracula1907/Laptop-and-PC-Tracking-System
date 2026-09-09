@@ -24,6 +24,8 @@ import {
   FileCheck,
   Archive,
   ScanLine,
+  QrCode,
+  MapPinned,
 } from 'lucide-react';
 
 
@@ -102,6 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
               <nav className="space-y-0.5">
                 <NavItem to="/dashboard" icon={<LayoutDashboard className="w-4 h-4" />} label="Dashboard" collapsed={collapsed} />
                 <NavItem to="/assets" icon={<Laptop className="w-4 h-4" />} label="Assets Inventory" collapsed={collapsed} />
+                <NavItem to="/site-laptops" icon={<MapPinned className="w-4 h-4 text-sky-400" />} label="Site Laptop" collapsed={collapsed} />
                 <NavItem to="/approvals" icon={<ShieldCheck className="w-4 h-4 text-amber-400" />} label="Approval Center" collapsed={collapsed} />
                 <NavItem to="/assignments" icon={<UserCheck className="w-4 h-4" />} label="Assignments" collapsed={collapsed} />
                 <NavItem to="/transfers" icon={<ArrowRightLeft className="w-4 h-4" />} label="Transfers" collapsed={collapsed} />
@@ -111,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                 <NavItem to="/clearance" icon={<UserX className="w-4 h-4 text-amber-400" />} label="Offboarding Clearance" collapsed={collapsed} />
                 <NavItem to="/documents" icon={<FileCheck className="w-4 h-4 text-emerald-400" />} label="Official Documents" collapsed={collapsed} />
                 <NavItem to="/retirements" icon={<Archive className="w-4 h-4 text-rose-400" />} label="Retirement & Replacement" collapsed={collapsed} />
-                <NavItem to="/security-gate" icon={<ScanLine className="w-4 h-4 text-cyan-400" />} label="Security Gate" collapsed={collapsed} />
+                <NavItem to="/security-gate" icon={<QrCode className="w-4 h-4 text-cyan-400" />} label="QR & Security Gate" collapsed={collapsed} />
               </nav>
 
             </div>
@@ -184,7 +187,7 @@ const NavItem: React.FC<NavItemProps> = ({ to, icon, label, collapsed }) => {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `flex items-center px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all duration-150 relative ${
+        `flex items-center px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 relative ${
           isActive
             ? 'bg-gradient-to-r from-[#3B2C6E]/80 to-[#4B3586]/60 border border-[#6B4FB8]/70 text-white shadow-[0_0_12px_rgba(107,79,184,0.3)]'
             : 'text-slate-400 hover:bg-[#131929] hover:text-slate-200'

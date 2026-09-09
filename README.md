@@ -59,23 +59,83 @@ Passwords are stored as bcrypt hashes in PostgreSQL database.
 
 ---
 
-## 🐳 Running with Docker (Recommended)
+---
 
-### 1. Launch Containers
-```bash
-docker-compose up -d --build
+## 🚀 Production Server Deployment & One-Command Updates
+
+### Architecture & Isolation Guarantee
+The production server hosts multiple independent systems, including **Parts Tracking**.
+**Faith Automation IT Inventory** is strictly isolated:
+- **Docker Compose Project Name**: `faith-it-inventory`
+- **Isolated Network**: `faith-it-inventory_network`
+- **Isolated Volume**: `faith-it-inventory_postgres_data`
+- **Internal Database**: PostgreSQL is **not** exposed to the host port 5432, preventing conflicts with other databases.
+- **Port Flexibility**: Web port (`ITAM_HTTP_PORT=80`) and alternative port (`ITAM_WEB_PORT=3000`) are fully customizable in `.env`.
+
+> **CRITICAL RULE**: Under NO circumstances does the update system affect, restart, or prune containers, networks, or volumes belonging to Parts Tracking.
+
+---
+
+### Standard Workflow
+
+#### 1. On Development PC
+1. Make and verify changes locally.
+2. Commit and push to GitHub:
+   ```bash
+   git add .
+   git commit -m "feat/fix: description of update"
+   git push origin main
+   ```
+
+#### 2. On Company Production Server
+Run the one-command updater:
+```bat
+update-server.bat
 ```
 
-### 2. Run Database Migrations & Seed Data
-```bash
-docker exec -it itam-backend npx prisma migrate deploy
-docker exec -it itam-backend npx prisma db seed
-```
+The script automatically executes 9 safe stages:
+1. **[1/9] Prerequisites**: Validates Git, Docker, Docker Compose, and Docker daemon.
+2. **[2/9] Directory & Environment**: Verifies `C:\Applications\FaithITInventory` and ensures production secrets in `.env` are preserved.
+3. **[3/9] Clean Tree Protection**: Aborts immediately if uncommitted local server modifications exist (never overwrites local server changes).
+4. **[4/9] GitHub Fetch**: Checks remote `origin/main` for approved updates.
+5. **[5/9] Fast-Forward Pull**: Pulls approved code with `--ff-only` and logs changed files.
+6. **[6/9] Container Rebuild**: Rebuilds only `faith-it-inventory` images.
+7. **[7/9] Database Safety & Migration**:
+   - Ensures `itam-postgres` is running and healthy.
+   - Creates automated timestamped backup in `backups/faith_it_inventory_YYYYMMDD_HHMMSS.sql`.
+   - Runs `prisma migrate deploy` (never resets or seeds destructive data).
+8. **[8/9] Service Start**: Starts/recreates only `faith-it-inventory` services in detached mode.
+9. **[9/9] Health Checks**: Validates container status, queries `/api/health` (database + API), checks web response, and outputs comprehensive SUCCESS/FAILURE summary.
 
-### 3. Access Application
-- **Web Interface**: `http://localhost:3000` or `http://localhost`
-- **Backend API**: `http://localhost:5000/api`
-- **Health Check**: `http://localhost:5000/api/health`
+Audit logs are stored in `deployment-logs/update-YYYY-MM-DD-HHMMSS.log`.
+
+---
+
+## 📱 Mobile Application (Client) Updates
+
+The mobile application is a React Native / Expo **client** and does NOT run in Docker:
+- **Expo Dev / Expo Go**: Run `update-mobile.bat` and select Option 1 or 2.
+- **Standalone Android APK**: Run `update-mobile.bat` and select Option 3 (EAS Build) or 4 (Local Build).
+- **Distribute**: Send the generated `.apk` to employee and security guard Android devices.
+
+---
+
+## 🐳 Manual Docker Management (Isolated Scope)
+
+Always use the project flag `-p faith-it-inventory`:
+```bash
+# Start all services
+docker compose -p faith-it-inventory up -d
+
+# Check status
+docker compose -p faith-it-inventory ps
+
+# View backend logs
+docker compose -p faith-it-inventory logs -f backend
+
+# Stop only IT Inventory services (Never touches Parts Tracking)
+docker compose -p faith-it-inventory down
+```
 
 ---
 

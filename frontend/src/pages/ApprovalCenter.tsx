@@ -19,6 +19,7 @@ import {
   ApprovalPriority,
 } from '../types';
 import { exportApprovalsToExcel } from '../utils/exporters';
+import { formatDateTimeIST } from '../utils/timezone';
 import {
   CheckCircle2,
   XCircle,
@@ -43,6 +44,8 @@ import {
   ExternalLink,
   Ban,
   Send,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 
 export const ApprovalCenter: React.FC = () => {
@@ -90,6 +93,22 @@ export const ApprovalCenter: React.FC = () => {
   const [targetRequestId, setTargetRequestId] = useState<string | null>(null);
   const [actionComment, setActionComment] = useState<string>('');
   const [actionSubmitting, setActionSubmitting] = useState<boolean>(false);
+
+  // Edit Modal State
+  const [showEditModal, setShowEditModal] = useState<boolean>(false);
+  const [editingRequest, setEditingRequest] = useState<any | null>(null);
+  const [editPriority, setEditPriority] = useState<ApprovalPriority>('MEDIUM');
+  const [editReason, setEditReason] = useState<string>('');
+  const [editComments, setEditComments] = useState<string>('');
+  const [editTargetDepartmentId, setEditTargetDepartmentId] = useState<string>('');
+  const [editSubmitting, setEditSubmitting] = useState<boolean>(false);
+
+  // Delete / Cancellation Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+  const [deletingRequest, setDeletingRequest] = useState<any | null>(null);
+  const [deleteReason, setDeleteReason] = useState<string>('');
+  const [forceDelete, setForceDelete] = useState<boolean>(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState<boolean>(false);
 
   // Fetch dynamic telemetry counts
   const fetchCounts = async () => {
@@ -244,6 +263,124 @@ export const ApprovalCenter: React.FC = () => {
     }
   };
 
+  // Stale page protection
+  useEffect(() => {
+    if (!loading && approvals.length === 0 && totalRecords > 0 && page > 1) {
+      const maxPage = Math.ceil(totalRecords / limit) || 1;
+      if (page > maxPage) {
+        setPage(maxPage);
+      }
+    }
+  }, [approvals.length, totalRecords, page, limit, loading]);
+
+  const openEditModal = (req: any) => {
+    setEditingRequest(req);
+    setEditPriority(req.priority || 'MEDIUM');
+    setEditReason(req.reason || '');
+    setEditComments(req.comments || '');
+    setEditTargetDepartmentId(req.targetDepartmentId || '');
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRequest) return;
+    setEditSubmitting(true);
+    try {
+      const res: any = await api.put(`/approvals/${editingRequest.id}`, {
+        priority: editPriority,
+        reason: editReason.trim() || undefined,
+        comments: editComments.trim() || undefined,
+        targetDepartmentId: editTargetDepartmentId || null,
+      });
+      if (res.success) {
+        showToast('Approval request updated successfully.', 'success');
+        setShowEditModal(false);
+        setEditingRequest(null);
+        if (showDetailModal && selectedRequest?.id === editingRequest.id) {
+          openDetailModal(editingRequest.id);
+        }
+        fetchApprovals();
+        fetchCounts();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update approval request.', 'error');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const openDeleteModal = (req: any) => {
+    setDeletingRequest(req);
+    setDeleteReason('');
+    setForceDelete(false);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!deletingRequest) return;
+    if (deletingRequest.status === 'APPROVED') {
+      showToast('Approved requests cannot be deleted to preserve compliance audit trail.', 'error');
+      return;
+    }
+    setDeleteSubmitting(true);
+    try {
+      const res: any = await api.delete(`/approvals/${deletingRequest.id}`, {
+        data: {
+          reason: deleteReason.trim() || undefined,
+          forceDelete,
+        },
+      });
+      if (res.success) {
+        showToast(res.message || 'Request cancelled/deleted successfully.', 'success');
+        setShowDeleteModal(false);
+        setDeletingRequest(null);
+        if (showDetailModal && selectedRequest?.id === deletingRequest.id) {
+          setShowDetailModal(false);
+        }
+        fetchApprovals();
+        fetchCounts();
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Failed to cancel/delete request.', 'error');
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      if (totalRecords === 0) {
+        showToast('No approval records to export.', 'error');
+        return;
+      }
+      if (totalRecords > limit) {
+        showToast('Exporting complete filtered dataset...', 'info');
+        const params = new URLSearchParams();
+        params.append('page', '1');
+        params.append('limit', '10000');
+        params.append('queue', queue);
+        if (search.trim()) params.append('search', search.trim());
+        if (requestTypeFilter !== 'ALL') params.append('requestType', requestTypeFilter);
+        if (statusFilter !== 'ALL') params.append('status', statusFilter);
+        if (priorityFilter !== 'ALL') params.append('priority', priorityFilter);
+        if (departmentFilter !== 'ALL') params.append('departmentId', departmentFilter);
+
+        const res: any = await api.get(`/approvals?${params.toString()}`);
+        if (res.success && res.data?.requests?.length) {
+          exportApprovalsToExcel(res.data.requests);
+          showToast(`Exported ${res.data.requests.length} approval requests to Excel.`, 'success');
+          return;
+        }
+      }
+      exportApprovalsToExcel(approvals);
+      showToast(`Exported ${approvals.length} approval requests to Excel.`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to export approvals to Excel.', 'error');
+    }
+  };
+
   // Helper for SLA calculation
   const calculateSla = (createdAt: string, deadline?: string) => {
     const created = new Date(createdAt);
@@ -348,10 +485,7 @@ export const ApprovalCenter: React.FC = () => {
           <div className="flex items-center gap-2">
             <Button
               variant="secondary"
-              onClick={() => {
-                exportApprovalsToExcel(approvals);
-                showToast('Approvals Excel report generated.', 'success');
-              }}
+              onClick={handleExportExcel}
             >
               <FileSpreadsheet className="w-4 h-4 mr-1.5 text-emerald-400" />
               Export Excel (XLSX)
@@ -590,6 +724,7 @@ export const ApprovalCenter: React.FC = () => {
               }}
               className="bg-[#121624] border border-[#2B3550] rounded px-2 py-1 text-slate-200 text-xs outline-none"
             >
+              <option value={10}>10</option>
               <option value={25}>25</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -637,12 +772,19 @@ export const ApprovalCenter: React.FC = () => {
                 </tr>
               ) : (
                 approvals.map((req) => {
+                  const currentUserId = user?.id || (user as any)?.userId;
+                  const isRequester = req.requestedById === currentUserId;
+                  const isAdmin = user?.role?.code === 'ADMIN';
+                  const isManager = user?.role?.code === 'MANAGER';
+
                   const isEligibleApprover =
                     req.status === 'PENDING' &&
-                    req.requestedById !== user?.id &&
-                    (user?.role?.code === 'ADMIN' || user?.role?.code === 'MANAGER');
+                    !isRequester &&
+                    (isAdmin || isManager);
 
-                  const isOwnRequest = req.requestedById === user?.id;
+                  const canEditRow = (isRequester || isAdmin) && (req.status === 'PENDING' || req.status === 'CHANGES_REQUESTED');
+                  const canCancelRow = (isRequester || isAdmin) && (req.status === 'PENDING' || req.status === 'CHANGES_REQUESTED');
+                  const canDeleteRow = isAdmin && req.status !== 'APPROVED';
 
                   return (
                     <tr
@@ -684,7 +826,7 @@ export const ApprovalCenter: React.FC = () => {
                       <td className="py-3 px-3.5 text-slate-400">
                         <div>
                           <span className="font-mono text-[11px] block text-slate-300">
-                            {new Date(req.requestedAt).toLocaleDateString('en-GB')}
+                            {formatDateTimeIST(req.requestedAt)}
                           </span>
                           {req.status === 'PENDING' && calculateSla(req.requestedAt, req.approvalDeadline)}
                         </div>
@@ -699,7 +841,7 @@ export const ApprovalCenter: React.FC = () => {
                         {req.decisionBy?.employee?.fullName || req.decisionBy?.username || '—'}
                       </td>
                       <td className="py-3 px-3.5 text-slate-400 font-mono text-[11px]">
-                        {req.decisionAt ? new Date(req.decisionAt).toLocaleDateString('en-GB') : '—'}
+                        {req.decisionAt ? formatDateTimeIST(req.decisionAt) : '—'}
                       </td>
                       <td className="py-3 px-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1.5">
@@ -728,17 +870,43 @@ export const ApprovalCenter: React.FC = () => {
                               >
                                 <X className="w-3.5 h-3.5" />
                               </button>
+                              <button
+                                title="Request Changes / Modifications"
+                                onClick={() => openActionModal('REQUEST_CHANGES', req.id)}
+                                className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 hover:border-amber-500 transition-colors"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5" />
+                              </button>
                             </>
                           )}
 
-                          {/* Requester Cancel Action */}
-                          {isOwnRequest && req.status === 'PENDING' && (
+                          {/* Requester or Admin Edit Action */}
+                          {canEditRow && (
                             <button
-                              title="Cancel Request"
-                              onClick={() => openActionModal('CANCEL', req.id)}
-                              className="p-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 hover:text-rose-400 hover:border-rose-500 transition-colors"
+                              title="Edit Proposal Details"
+                              onClick={() => openEditModal(req)}
+                              className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/20 hover:border-indigo-500 transition-colors"
                             >
-                              <Ban className="w-3.5 h-3.5" />
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {/* Cancel or Delete Action */}
+                          {(canCancelRow || canDeleteRow) && (
+                            <button
+                              title={
+                                canDeleteRow && req.status !== 'PENDING' && req.status !== 'CHANGES_REQUESTED'
+                                  ? 'Delete Request'
+                                  : 'Cancel / Withdraw Request'
+                              }
+                              onClick={() => openDeleteModal(req)}
+                              className="p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500 transition-colors"
+                            >
+                              {canDeleteRow && req.status !== 'PENDING' && req.status !== 'CHANGES_REQUESTED' ? (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              ) : (
+                                <Ban className="w-3.5 h-3.5" />
+                              )}
                             </button>
                           )}
                         </div>
@@ -752,11 +920,30 @@ export const ApprovalCenter: React.FC = () => {
         </div>
 
         {/* Server-Side Pagination Bar */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-[#1E2535] bg-[#0A0D15]/60 text-xs text-slate-400">
-          <div>
-            Showing <strong className="text-white">{approvals.length ? (page - 1) * limit + 1 : 0}</strong> to{' '}
-            <strong className="text-white">{Math.min(page * limit, totalRecords)}</strong> of{' '}
-            <strong className="text-white">{totalRecords}</strong> approval requests
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-[#1E2535] bg-[#0A0D15]/60 text-xs text-slate-400">
+          <div className="flex items-center gap-3">
+            <span>
+              Showing <strong className="text-white">{approvals.length ? (page - 1) * limit + 1 : 0}</strong> to{' '}
+              <strong className="text-white">{Math.min(page * limit, totalRecords)}</strong> of{' '}
+              <strong className="text-white">{totalRecords}</strong> approval requests
+            </span>
+            <span className="text-slate-600 hidden sm:inline">|</span>
+            <div className="flex items-center gap-1.5">
+              <span>Rows per page:</span>
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setPage(1);
+                }}
+                className="bg-[#121624] border border-[#2B3550] rounded px-2 py-0.5 text-slate-200 text-xs outline-none focus:border-indigo-500"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -970,7 +1157,7 @@ export const ApprovalCenter: React.FC = () => {
                 {selectedRequest.history?.map((h: any) => (
                   <div key={h.id} className="text-xs flex items-start gap-3 pb-2 border-b border-[#1E2535]/60 last:border-0 last:pb-0">
                     <span className="font-mono text-[10px] text-slate-500 shrink-0 mt-0.5">
-                      {new Date(h.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                      {formatDateTimeIST(h.createdAt)}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
@@ -987,8 +1174,8 @@ export const ApprovalCenter: React.FC = () => {
             </div>
 
             {/* Action Bar inside Detail */}
-            <div className="flex items-center justify-between pt-3 border-t border-[#1E2535]">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-[#1E2535]">
+              <div className="flex flex-wrap items-center gap-2">
                 {selectedRequest.permissions?.canApprove && (
                   <>
                     <Button
@@ -1012,12 +1199,30 @@ export const ApprovalCenter: React.FC = () => {
                   </>
                 )}
 
+                {selectedRequest.permissions?.canEdit && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => openEditModal(selectedRequest)}
+                  >
+                    <Pencil className="w-4 h-4 mr-1.5 text-indigo-400" /> Edit Request
+                  </Button>
+                )}
+
                 {selectedRequest.permissions?.canCancel && (
                   <Button
                     variant="outline"
-                    onClick={() => openActionModal('CANCEL', selectedRequest.id)}
+                    onClick={() => openDeleteModal(selectedRequest)}
                   >
                     <Ban className="w-4 h-4 mr-1.5 text-rose-400" /> Cancel Request
+                  </Button>
+                )}
+
+                {selectedRequest.permissions?.canDelete && (
+                  <Button
+                    variant="danger"
+                    onClick={() => openDeleteModal(selectedRequest)}
+                  >
+                    <Trash2 className="w-4 h-4 mr-1.5 text-rose-300" /> Delete Request
                   </Button>
                 )}
               </div>
@@ -1169,6 +1374,159 @@ export const ApprovalCenter: React.FC = () => {
                 : actionType === 'REQUEST_CHANGES'
                 ? 'Submit Change Request'
                 : 'Confirm Cancellation'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* EDIT REQUEST MODAL */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title={editingRequest ? `Edit Proposal: ${editingRequest.requestCode}` : 'Edit Request'}
+        subtitle="Update proposal priority, justification, notes, and routing department"
+        maxWidth="md"
+      >
+        <form onSubmit={handleEditSubmit} className="space-y-4">
+          <div className="space-y-3">
+            <Select
+              label="Priority Level"
+              value={editPriority}
+              onChange={(e) => setEditPriority(e.target.value as ApprovalPriority)}
+              options={[
+                { value: 'LOW', label: 'LOW - Standard routine operation' },
+                { value: 'MEDIUM', label: 'MEDIUM - Normal business turnaround' },
+                { value: 'HIGH', label: 'HIGH - Urgent business demand' },
+                { value: 'URGENT', label: 'URGENT - Immediate production outage / blocker' },
+              ]}
+            />
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                Business Reason / Justification
+              </label>
+              <textarea
+                rows={3}
+                value={editReason}
+                onChange={(e) => setEditReason(e.target.value)}
+                placeholder="State specific purpose and business need for this hardware allocation..."
+                className="w-full bg-[#121624] border border-[#2B3550] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                Internal Notes / Additional Comments
+              </label>
+              <textarea
+                rows={2}
+                value={editComments}
+                onChange={(e) => setEditComments(e.target.value)}
+                placeholder="Optional internal remarks or specifications..."
+                className="w-full bg-[#121624] border border-[#2B3550] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <Select
+              label="Target Department (Routing)"
+              value={editTargetDepartmentId}
+              onChange={(e) => setEditTargetDepartmentId(e.target.value)}
+              options={[
+                { value: '', label: 'Unchanged / Default Asset Department' },
+                ...departments.map((d) => ({ value: d.id, label: `${d.name} (${d.code})` })),
+              ]}
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-[#1E2535]">
+            <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={editSubmitting}>
+              Save Changes
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* DELETE / CANCEL REQUEST MODAL */}
+      <Modal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        title={
+          deletingRequest?.status === 'PENDING' || deletingRequest?.status === 'CHANGES_REQUESTED'
+            ? 'Cancel / Withdraw Approval Request'
+            : 'Delete Approval Request'
+        }
+        subtitle={
+          deletingRequest?.status === 'PENDING' || deletingRequest?.status === 'CHANGES_REQUESTED'
+            ? `Withdraw request ${deletingRequest?.requestCode} from review pipeline`
+            : `Remove record ${deletingRequest?.requestCode} from database`
+        }
+        maxWidth="md"
+      >
+        <form onSubmit={handleDeleteSubmit} className="space-y-4">
+          <div className="space-y-3 text-xs">
+            {deletingRequest?.status === 'PENDING' || deletingRequest?.status === 'CHANGES_REQUESTED' ? (
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Cancellation Confirmation</p>
+                  <p className="text-slate-300 mt-1">
+                    Cancelling will mark request <strong className="text-white font-mono">{deletingRequest?.requestCode}</strong> as <strong className="text-rose-400">CANCELLED</strong>. The proposed lifecycle changes will not be applied to the hardware.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-start gap-2">
+                <Trash2 className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Administrator Record Deletion</p>
+                  <p className="text-slate-300 mt-1">
+                    You are deleting request <strong className="text-white font-mono">{deletingRequest?.requestCode}</strong>. Only un-executed or rejected requests without active hardware movement locks can be removed.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Reason / Note {deletingRequest?.status === 'PENDING' ? '(Optional)' : '*'}
+              </label>
+              <textarea
+                rows={2}
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Provide reason for cancellation or removal..."
+                className="w-full bg-[#121624] border border-[#2B3550] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
+              />
+            </div>
+
+            {user?.role?.code === 'ADMIN' && deletingRequest?.status !== 'PENDING' && deletingRequest?.status !== 'CHANGES_REQUESTED' && (
+              <label className="flex items-center gap-2 cursor-pointer pt-1 text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={forceDelete}
+                  onChange={(e) => setForceDelete(e.target.checked)}
+                  className="rounded border-[#2B3550] bg-[#121624] text-rose-500 focus:ring-0"
+                />
+                <span className="text-[11px]">Force permanent purge of unlinked historical record</span>
+              </label>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-[#1E2535]">
+            <Button type="button" variant="outline" onClick={() => setShowDeleteModal(false)}>
+              Back
+            </Button>
+            <Button
+              type="submit"
+              variant="danger"
+              loading={deleteSubmitting}
+            >
+              {deletingRequest?.status === 'PENDING' || deletingRequest?.status === 'CHANGES_REQUESTED'
+                ? 'Confirm Cancellation'
+                : 'Confirm Deletion'}
             </Button>
           </div>
         </form>

@@ -41,11 +41,22 @@ export class ApprovalService {
   }
 
   /**
+   * Helper to normalize user payload across JWT and ORM user objects
+   */
+  public static normalizeUser(user: any): { id: string; userId: string; roleCode: string; username: string } {
+    const id = user?.userId || user?.id || '';
+    const roleCode = user?.roleCode || user?.role?.code || '';
+    const username = user?.username || 'system';
+    return { id, userId: id, roleCode, username };
+  }
+
+  /**
    * Get dynamic approval telemetry aggregates from PostgreSQL
    */
-  public static async getApprovalCounts(user: { id: string; role?: { code: string } }) {
-    const isAdmin = user?.role?.code === 'ADMIN';
-    const isManager = user?.role?.code === 'MANAGER';
+  public static async getApprovalCounts(user: any) {
+    const { id, roleCode } = this.normalizeUser(user);
+    const isAdmin = roleCode === 'ADMIN';
+    const isManager = roleCode === 'MANAGER';
 
     const [total, pending, approved, rejected, changesRequested, myRequests, urgent] = await Promise.all([
       prisma.approvalRequest.count(),
@@ -53,7 +64,7 @@ export class ApprovalService {
       prisma.approvalRequest.count({ where: { status: ApprovalStatus.APPROVED } }),
       prisma.approvalRequest.count({ where: { status: ApprovalStatus.REJECTED } }),
       prisma.approvalRequest.count({ where: { status: ApprovalStatus.CHANGES_REQUESTED } }),
-      prisma.approvalRequest.count({ where: { requestedById: user.id } }),
+      prisma.approvalRequest.count({ where: { requestedById: id } }),
       prisma.approvalRequest.count({
         where: {
           status: ApprovalStatus.PENDING,
@@ -68,14 +79,14 @@ export class ApprovalService {
       pendingMyAction = await prisma.approvalRequest.count({
         where: {
           status: ApprovalStatus.PENDING,
-          requestedById: { not: user.id },
+          requestedById: { not: id },
         },
       });
     } else if (isManager) {
       pendingMyAction = await prisma.approvalRequest.count({
         where: {
           status: ApprovalStatus.PENDING,
-          requestedById: { not: user.id },
+          requestedById: { not: id },
           OR: [{ targetRole: 'MANAGER' }, { targetRole: null }],
         },
       });
@@ -109,21 +120,22 @@ export class ApprovalService {
       fromDate?: string;
       toDate?: string;
     },
-    user: { id: string; role?: { code: string } }
+    user: any
   ) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.max(1, Math.min(100, Number(query.limit) || 25));
     const skip = (page - 1) * limit;
 
     const where: Prisma.ApprovalRequestWhereInput = {};
-    const isAdmin = user?.role?.code === 'ADMIN';
+    const { id, roleCode } = this.normalizeUser(user);
+    const isAdmin = roleCode === 'ADMIN';
 
     // Queue filter
     if (query.queue === 'my_requests') {
-      where.requestedById = user.id;
+      where.requestedById = id;
     } else if (query.queue === 'pending_my_approval') {
       where.status = ApprovalStatus.PENDING;
-      where.requestedById = { not: user.id }; // Self-approval blocked
+      where.requestedById = { not: id }; // Self-approval blocked
       if (!isAdmin) {
         where.OR = [{ targetRole: 'MANAGER' }, { targetRole: null }];
       }
@@ -216,7 +228,7 @@ export class ApprovalService {
   /**
    * Get single approval request by ID with complete diff, history, and capability flags
    */
-  public static async getApprovalById(id: string, user: { id: string; role?: { code: string } }) {
+  public static async getApprovalById(id: string, user: any) {
     const request = await prisma.approvalRequest.findUnique({
       where: { id },
       include: {
@@ -257,11 +269,12 @@ export class ApprovalService {
     }
 
     // Check policy for self-approval permission
+    const { id: currentUserId, roleCode } = this.normalizeUser(user);
     const policy = await ApprovalPolicyService.getPolicy(request.requestType);
     const allowSelf = policy?.allowSelfApproval || false;
-    const isRequester = request.requestedById === user.id;
-    const isAdmin = user?.role?.code === 'ADMIN';
-    const isManager = user?.role?.code === 'MANAGER';
+    const isRequester = request.requestedById === currentUserId;
+    const isAdmin = roleCode === 'ADMIN';
+    const isManager = roleCode === 'MANAGER';
 
     // Capabilities
     const isPending = request.status === ApprovalStatus.PENDING;
@@ -274,7 +287,11 @@ export class ApprovalService {
 
     const canReject = canApprove;
     const canRequestChanges = canApprove;
-    const canCancel = isRequester && (isPending || isChangesReq);
+    const canEdit = (isPending || isChangesReq) && (isRequester || isAdmin);
+    const canCancel = (isPending || isChangesReq) && (isRequester || isAdmin);
+    const canDelete =
+      (isAdmin && (request.status === ApprovalStatus.CANCELLED || request.status === ApprovalStatus.REJECTED || isPending)) ||
+      (isRequester && isPending);
     const canResubmit = isRequester && isChangesReq;
 
     return {
@@ -284,7 +301,9 @@ export class ApprovalService {
         canApprove,
         canReject,
         canRequestChanges,
+        canEdit,
         canCancel,
+        canDelete,
         canResubmit,
       },
     };
@@ -408,13 +427,15 @@ export class ApprovalService {
   /**
    * Approve and execute the underlying IT asset operation
    */
+  /**
+   * Approve and execute the underlying IT asset operation
+   */
   public static async approveRequest(
     id: string,
     data: { comment?: string },
     user: any
   ) {
-    const effectiveUserId = user?.userId || user?.id;
-
+    const { id: effectiveUserId, username: effectiveUsername } = this.normalizeUser(user);
 
     return await prisma.$transaction(async (tx) => {
       // 1. Concurrency Check
@@ -437,7 +458,6 @@ export class ApprovalService {
       if (request.requestedById === effectiveUserId && !policy?.allowSelfApproval) {
         throw new Error('You cannot approve your own request.');
       }
-
 
       // 3. Stale Request Protection
       if (request.assetId && request.expectedSourceState && request.asset) {
@@ -501,7 +521,7 @@ export class ApprovalService {
             departmentId: departmentId || employee.departmentId,
             locationId: locationId || employee.locationId,
             assignedById: request.requestedById,
-            approvedById: user.id,
+            approvedById: effectiveUserId,
             assignedAt: now,
             conditionAtAssignment: conditionAtAssignment || AssetCondition.GOOD,
             reason: reason || 'Approved through Approval Center',
@@ -580,7 +600,7 @@ export class ApprovalService {
               departmentId: newDepartmentId || newHolder.departmentId,
               locationId: newLocationId || newHolder.locationId,
               assignedById: request.requestedById,
-              approvedById: user.id,
+              approvedById: effectiveUserId,
               assignedAt: now,
               reason: reason || 'Approved transfer assignment',
               status: WorkflowStatus.ACTIVE,
@@ -594,7 +614,7 @@ export class ApprovalService {
             where: { id: request.relatedEntityId },
             data: {
               status: WorkflowStatus.COMPLETED,
-              approvedById: user.id,
+              approvedById: effectiveUserId,
             },
           });
         }
@@ -662,8 +682,113 @@ export class ApprovalService {
           where: { approvalRequestId: request.id },
           data: { status: RetirementStatus.APPROVED },
         });
-      }
+      } else if (request.requestType === ApprovalRequestType.RETURN_DISPOSITION && request.assetId) {
+        const { disposition, conditionAtReturn } = changes;
+        const nextStatus =
+          disposition === 'RETIRED' || disposition === 'SCRAPPED'
+            ? AssetStatus.RETIRED
+            : AssetStatus.AVAILABLE;
 
+        await tx.asset.update({
+          where: { id: request.assetId },
+          data: {
+            status: nextStatus,
+            allocationStatus: AllocationStatus.NOT_ALLOCATED,
+            sourceAllocationStatus: 'Not Allocated',
+            currentHolderId: null,
+            employeeNameSource: null,
+            condition: conditionAtReturn || request.asset?.condition || AssetCondition.GOOD,
+            dateOfDeallocation: now,
+          },
+        });
+
+        if (request.relatedEntityId) {
+          await tx.assetReturn.updateMany({
+            where: { id: request.relatedEntityId },
+            data: {
+              status: WorkflowStatus.COMPLETED,
+              disposition: disposition || 'RETURN_TO_STOCK',
+              approvedById: effectiveUserId,
+            },
+          });
+        }
+
+        await HistoryService.recordEvent(tx, {
+          assetId: request.assetId,
+          action: AssetAction.RETURNED,
+          previousStatus: request.asset?.status,
+          newStatus: nextStatus,
+          performedById: effectiveUserId,
+          eventDate: now,
+          remarks: `Return disposition approved via request ${request.requestCode}: ${disposition || 'Completed'}`,
+        });
+      } else if (request.requestType === ApprovalRequestType.ASSET_STATUS_CHANGE && request.assetId) {
+        const { targetStatus, reason } = changes;
+        if (targetStatus) {
+          await tx.asset.update({
+            where: { id: request.assetId },
+            data: { status: targetStatus },
+          });
+
+          await HistoryService.recordEvent(tx, {
+            assetId: request.assetId,
+            action: AssetAction.STATUS_CHANGED,
+            previousStatus: request.asset?.status,
+            newStatus: targetStatus,
+            performedById: effectiveUserId,
+            eventDate: now,
+            remarks: `Asset status changed via approval ${request.requestCode}: ${reason || ''}`,
+          });
+        }
+      } else if (request.requestType === ApprovalRequestType.MAINTENANCE_COMPLETION) {
+        if (request.relatedEntityId) {
+          await tx.maintenanceRecord.updateMany({
+            where: { id: request.relatedEntityId },
+            data: {
+              repairStatus: MaintenanceStatus.COMPLETED,
+              repairEndDate: now,
+              approvedById: effectiveUserId,
+            },
+          });
+        }
+        if (request.assetId) {
+          await tx.asset.update({
+            where: { id: request.assetId },
+            data: { status: AssetStatus.AVAILABLE },
+          });
+
+          await HistoryService.recordEvent(tx, {
+            assetId: request.assetId,
+            action: AssetAction.MAINTENANCE_COMPLETED,
+            previousStatus: AssetStatus.UNDER_REPAIR,
+            newStatus: AssetStatus.AVAILABLE,
+            performedById: effectiveUserId,
+            eventDate: now,
+            remarks: `Maintenance ticket completed via approval ${request.requestCode}`,
+          });
+        }
+      } else if (request.requestType === ApprovalRequestType.SENSITIVE_UPDATE && request.assetId) {
+        const updatePayload: any = {};
+        if (changes.serialNumber !== undefined) updatePayload.serialNumber = changes.serialNumber;
+        if (changes.companyAssetId !== undefined) updatePayload.companyAssetId = changes.companyAssetId;
+        if (changes.assetName !== undefined) updatePayload.assetName = changes.assetName;
+        if (changes.model !== undefined) updatePayload.model = changes.model;
+
+        if (Object.keys(updatePayload).length > 0) {
+          await tx.asset.update({
+            where: { id: request.assetId },
+            data: updatePayload,
+          });
+
+          await HistoryService.recordEvent(tx, {
+            assetId: request.assetId,
+            action: AssetAction.HARDWARE_CHANGED,
+            performedById: effectiveUserId,
+            eventDate: now,
+            remarks: `Sensitive asset details updated via approval ${request.requestCode}`,
+          });
+        }
+      }
 
       // 6. Update Approval Request State
       const updatedRequest = await tx.approvalRequest.update({
@@ -718,12 +843,11 @@ export class ApprovalService {
           entityId: id,
           newValue: JSON.stringify({
             decision: 'APPROVED',
-            decisionBy: user.username,
+            decisionBy: effectiveUsername,
             comment: data.comment,
           }),
         },
       });
-
 
       return updatedRequest;
     });
@@ -735,8 +859,10 @@ export class ApprovalService {
   public static async rejectRequest(
     id: string,
     data: { rejectionReason: string; comment?: string },
-    user: { id: string; role?: { code: string }; username: string }
+    user: any
   ) {
+    const { id: effectiveUserId, username: effectiveUsername } = this.normalizeUser(user);
+
     return await prisma.$transaction(async (tx) => {
       const request = await tx.approvalRequest.findUnique({ where: { id } });
       if (!request) throw new Error('Approval request not found.');
@@ -745,7 +871,7 @@ export class ApprovalService {
       }
 
       const policy = await ApprovalPolicyService.getPolicy(request.requestType);
-      if (request.requestedById === user.id && !policy?.allowSelfApproval) {
+      if (request.requestedById === effectiveUserId && !policy?.allowSelfApproval) {
         throw new Error('You cannot reject your own request.');
       }
 
@@ -756,18 +882,34 @@ export class ApprovalService {
         data: {
           status: ApprovalStatus.REJECTED,
           rejectionReason: data.rejectionReason,
-          decisionById: user.id,
+          decisionById: effectiveUserId,
           decisionAt: now,
           decisionComment: data.comment || data.rejectionReason,
         },
       });
+
+      // Update linked Retirement record status if applicable
+      if (request.requestType === ApprovalRequestType.ASSET_RETIREMENT) {
+        await tx.retirement.updateMany({
+          where: { approvalRequestId: request.id },
+          data: { status: RetirementStatus.REJECTED },
+        });
+      }
+
+      // Update linked Transfer record status if applicable
+      if (request.requestType === ApprovalRequestType.TRANSFER && request.relatedEntityId) {
+        await tx.assetTransfer.updateMany({
+          where: { id: request.relatedEntityId },
+          data: { status: WorkflowStatus.CANCELLED },
+        });
+      }
 
       await tx.approvalHistory.create({
         data: {
           approvalRequestId: id,
           step: request.currentStep,
           action: 'REJECTED',
-          performedById: user.id,
+          performedById: effectiveUserId,
           comment: `Rejected: ${data.rejectionReason}`,
         },
       });
@@ -785,12 +927,13 @@ export class ApprovalService {
 
       await tx.auditLog.create({
         data: {
-          userId: user.id,
+          userId: effectiveUserId,
           action: 'REQUEST_REJECTED',
           entityType: 'ApprovalRequest',
           entityId: id,
           newValue: JSON.stringify({
             decision: 'REJECTED',
+            decisionBy: effectiveUsername,
             rejectionReason: data.rejectionReason,
           }),
         },
@@ -806,8 +949,10 @@ export class ApprovalService {
   public static async requestChanges(
     id: string,
     data: { changesRequested: string; comment?: string },
-    user: { id: string; role?: { code: string }; username: string }
+    user: any
   ) {
+    const { id: effectiveUserId } = this.normalizeUser(user);
+
     return await prisma.$transaction(async (tx) => {
       const request = await tx.approvalRequest.findUnique({ where: { id } });
       if (!request) throw new Error('Approval request not found.');
@@ -822,7 +967,7 @@ export class ApprovalService {
         data: {
           status: ApprovalStatus.CHANGES_REQUESTED,
           changesRequested: data.changesRequested,
-          decisionById: user.id,
+          decisionById: effectiveUserId,
           decisionAt: now,
           decisionComment: data.comment || data.changesRequested,
         },
@@ -833,7 +978,7 @@ export class ApprovalService {
           approvalRequestId: id,
           step: request.currentStep,
           action: 'CHANGES_REQUESTED',
-          performedById: user.id,
+          performedById: effectiveUserId,
           comment: `Changes Requested: ${data.changesRequested}`,
         },
       });
@@ -851,7 +996,7 @@ export class ApprovalService {
 
       await tx.auditLog.create({
         data: {
-          userId: user.id,
+          userId: effectiveUserId,
           action: 'REQUEST_CHANGES_REQUESTED',
           entityType: 'ApprovalRequest',
           entityId: id,
@@ -869,15 +1014,17 @@ export class ApprovalService {
   public static async resubmitRequest(
     id: string,
     data: { proposedChanges?: any; remarks?: string },
-    userId: string
+    user: any
   ) {
+    const { id: effectiveUserId } = this.normalizeUser(user);
+
     return await prisma.$transaction(async (tx) => {
       const request = await tx.approvalRequest.findUnique({ where: { id } });
       if (!request) throw new Error('Approval request not found.');
       if (request.status !== ApprovalStatus.CHANGES_REQUESTED) {
         throw new Error('Only requests with changes requested can be resubmitted.');
       }
-      if (request.requestedById !== userId) {
+      if (request.requestedById !== effectiveUserId) {
         throw new Error('Only the original requester can resubmit this proposal.');
       }
 
@@ -907,7 +1054,7 @@ export class ApprovalService {
           approvalRequestId: id,
           step: request.currentStep,
           action: 'RESUBMITTED',
-          performedById: userId,
+          performedById: effectiveUserId,
           comment: data.remarks || `Proposal revised (Version ${request.version + 1}).`,
           snapshot: newProposedChangesStr,
         },
@@ -915,7 +1062,7 @@ export class ApprovalService {
 
       await tx.auditLog.create({
         data: {
-          userId,
+          userId: effectiveUserId,
           action: 'REQUEST_RESUBMITTED',
           entityType: 'ApprovalRequest',
           entityId: id,
@@ -928,9 +1075,12 @@ export class ApprovalService {
   }
 
   /**
-   * Cancel an approval request by the requester
+   * Cancel an approval request by the requester or admin
    */
-  public static async cancelRequest(id: string, data: { cancellationReason: string }, userId: string) {
+  public static async cancelRequest(id: string, data: { cancellationReason: string }, user: any) {
+    const { id: effectiveUserId, roleCode } = this.normalizeUser(user);
+    const isAdmin = roleCode === 'ADMIN';
+
     return await prisma.$transaction(async (tx) => {
       const request = await tx.approvalRequest.findUnique({ where: { id } });
       if (!request) throw new Error('Approval request not found.');
@@ -940,7 +1090,7 @@ export class ApprovalService {
       ) {
         throw new Error(`Cannot cancel a request that is already ${request.status}.`);
       }
-      if (request.requestedById !== userId) {
+      if (request.requestedById !== effectiveUserId && !isAdmin) {
         throw new Error('You are not authorized to cancel this request.');
       }
 
@@ -960,14 +1110,14 @@ export class ApprovalService {
           approvalRequestId: id,
           step: request.currentStep,
           action: 'CANCELLED',
-          performedById: userId,
-          comment: `Cancelled by requester: ${data.cancellationReason}`,
+          performedById: effectiveUserId,
+          comment: `Cancelled: ${data.cancellationReason}`,
         },
       });
 
       await tx.auditLog.create({
         data: {
-          userId,
+          userId: effectiveUserId,
           action: 'REQUEST_CANCELLED',
           entityType: 'ApprovalRequest',
           entityId: id,
@@ -976,6 +1126,197 @@ export class ApprovalService {
       });
 
       return updated;
+    });
+  }
+
+  /**
+   * Edit an existing approval request (PENDING or CHANGES_REQUESTED)
+   */
+  public static async updateApprovalRequest(
+    id: string,
+    data: {
+      priority?: ApprovalPriority;
+      reason?: string;
+      comments?: string;
+      targetDepartmentId?: string | null;
+      proposedChanges?: any;
+    },
+    user: any
+  ) {
+    const { id: effectiveUserId, roleCode } = this.normalizeUser(user);
+    const isAdmin = roleCode === 'ADMIN';
+
+    return await prisma.$transaction(async (tx) => {
+      const request = await tx.approvalRequest.findUnique({ where: { id } });
+      if (!request) throw new Error('Approval request not found.');
+
+      if (request.status === ApprovalStatus.APPROVED) {
+        throw new Error(
+          'Cannot edit an approved request because its lifecycle workflow has already been executed.'
+        );
+      }
+      if (request.status === ApprovalStatus.REJECTED || request.status === ApprovalStatus.CANCELLED) {
+        throw new Error(`Cannot edit a request that is already ${request.status}.`);
+      }
+
+      const isRequester = request.requestedById === effectiveUserId;
+      if (!isRequester && !isAdmin) {
+        throw new Error('You are not authorized to edit this approval request.');
+      }
+
+      const updateData: Prisma.ApprovalRequestUpdateInput = {};
+      if (data.priority !== undefined) updateData.priority = data.priority;
+      if (data.reason !== undefined) updateData.reason = data.reason;
+      if (data.comments !== undefined) updateData.comments = data.comments;
+      if (data.targetDepartmentId !== undefined) {
+        updateData.targetDepartment = data.targetDepartmentId
+          ? { connect: { id: data.targetDepartmentId } }
+          : { disconnect: true };
+      }
+      if (data.proposedChanges !== undefined) {
+        updateData.proposedChanges =
+          typeof data.proposedChanges === 'string'
+            ? data.proposedChanges
+            : JSON.stringify(data.proposedChanges);
+      }
+
+      const updated = await tx.approvalRequest.update({
+        where: { id },
+        data: updateData,
+        include: {
+          asset: true,
+          requestedBy: { include: { employee: true } },
+          targetDepartment: true,
+        },
+      });
+
+      // Timeline entry
+      await tx.approvalHistory.create({
+        data: {
+          approvalRequestId: id,
+          step: request.currentStep,
+          action: 'EDITED',
+          performedById: effectiveUserId,
+          comment: `Request details modified: ${data.reason || 'Updated proposal parameters.'}`,
+          snapshot: updateData.proposedChanges ? String(updateData.proposedChanges) : undefined,
+        },
+      });
+
+      // Audit Log
+      await tx.auditLog.create({
+        data: {
+          userId: effectiveUserId,
+          action: 'REQUEST_EDITED',
+          entityType: 'ApprovalRequest',
+          entityId: id,
+          newValue: JSON.stringify({
+            priority: data.priority,
+            reason: data.reason,
+            targetDepartmentId: data.targetDepartmentId,
+          }),
+        },
+      });
+
+      return updated;
+    });
+  }
+
+  /**
+   * Delete or Cancel an approval request safely
+   */
+  public static async deleteApprovalRequest(
+    id: string,
+    data: { reason?: string; forceDelete?: boolean } = {},
+    user: any
+  ) {
+    const { id: effectiveUserId, roleCode } = this.normalizeUser(user);
+    const isAdmin = roleCode === 'ADMIN';
+
+    return await prisma.$transaction(async (tx) => {
+      const request = await tx.approvalRequest.findUnique({
+        where: { id },
+        include: { retirements: true, gateMovements: true },
+      });
+      if (!request) throw new Error('Approval request not found.');
+
+      if (request.status === ApprovalStatus.APPROVED) {
+        throw new Error(
+          'Cannot delete an approved request. The underlying asset lifecycle operation has already executed and must remain part of the immutable compliance audit trail.'
+        );
+      }
+
+      const isRequester = request.requestedById === effectiveUserId;
+      if (!isRequester && !isAdmin) {
+        throw new Error('You are not authorized to delete or cancel this approval request.');
+      }
+
+      const now = new Date();
+      const cancellationReason = data.reason || 'Cancelled by user';
+
+      // If hard delete requested by ADMIN for unlinked cancelled/rejected/pending requests:
+      const canHardDelete =
+        isAdmin &&
+        data.forceDelete &&
+        request.retirements.length === 0 &&
+        request.gateMovements.length === 0;
+
+      if (canHardDelete) {
+        await tx.approvalHistory.deleteMany({ where: { approvalRequestId: id } });
+        await tx.approvalRequest.delete({ where: { id } });
+
+        await tx.auditLog.create({
+          data: {
+            userId: effectiveUserId,
+            action: 'REQUEST_DELETED',
+            entityType: 'ApprovalRequest',
+            entityId: id,
+            newValue: JSON.stringify({ requestCode: request.requestCode, reason: cancellationReason }),
+          },
+        });
+
+        return {
+          success: true,
+          message: `Approval request ${request.requestCode} permanently deleted.`,
+          deleted: true,
+        };
+      }
+
+      // Default safe operation: Soft cancellation
+      const updated = await tx.approvalRequest.update({
+        where: { id },
+        data: {
+          status: ApprovalStatus.CANCELLED,
+          cancellationReason,
+          cancelledAt: now,
+        },
+      });
+
+      await tx.approvalHistory.create({
+        data: {
+          approvalRequestId: id,
+          step: request.currentStep,
+          action: 'CANCELLED',
+          performedById: effectiveUserId,
+          comment: cancellationReason,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: effectiveUserId,
+          action: 'REQUEST_CANCELLED',
+          entityType: 'ApprovalRequest',
+          entityId: id,
+          newValue: JSON.stringify({ requestCode: request.requestCode, cancellationReason }),
+        },
+      });
+
+      return {
+        success: true,
+        message: `Approval request ${request.requestCode} cancelled.`,
+        deleted: false,
+        data: updated,
+      };
     });
   }
 }

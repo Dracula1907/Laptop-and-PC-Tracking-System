@@ -25,12 +25,14 @@ import retirementRoutes from './retirement.routes';
 import securityGateRoutes from './security-gate.routes';
 import qrRoutes from './qr.routes';
 import gateRoutes from './gate-master.routes';
+import siteLaptopRoutes from './site-laptop.routes';
 
 const router = Router();
 
 router.use('/health', healthRoutes);
 router.use('/auth', authRoutes);
 router.use('/assets', assetRoutes);
+router.use('/site-laptops', siteLaptopRoutes);
 router.use('/assignments', assignmentRoutes);
 router.use('/transfers', transferRoutes);
 router.use('/returns', returnRoutes);

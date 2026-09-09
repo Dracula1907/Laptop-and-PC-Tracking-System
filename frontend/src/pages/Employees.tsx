@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { Modal } from '../components/Modal';
 import { Input } from '../components/Input';
 import { Select } from '../components/Select';
+import { TablePaginationFooter } from '../components/TablePaginationFooter';
 import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -149,6 +150,16 @@ export const Employees: React.FC = () => {
     fetchEmployees();
   }, [fetchEmployees]);
 
+  // Reset page to 1 on search or filter change
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, departmentFilter, locationFilter, designationFilter]);
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
+    setPage(1);
+  };
+
   const handleResetFilters = () => {
     setSearch('');
     setStatusFilter('ALL');
@@ -288,7 +299,7 @@ export const Employees: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-12 sm:pb-16">
       {/* Page Header */}
       <PageHeader
         title="Employee Master Directory"
@@ -457,32 +468,13 @@ export const Employees: React.FC = () => {
               </button>
             )}
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400">Rows:</span>
-            <select
-              value={limit}
-              onChange={(e) => {
-                setLimit(Number(e.target.value));
-                setPage(1);
-              }}
-              className="bg-[#121624] border border-[#2B3550] rounded px-2 py-1 text-slate-200 text-xs outline-none"
-            >
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
-            <span className="text-slate-400 font-mono">
-              Total: <strong className="text-white">{totalRecords}</strong>
-            </span>
-          </div>
         </div>
       </div>
 
       {/* 12-Column Table with Internal Horizontal Scroll */}
-      <div className="bg-[#0E131F] border border-[#1E2535] rounded-xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto min-w-[1450px]">
-          <table className="w-full text-left border-collapse text-xs">
+      <div className="relative bg-[#0E131F] border border-[#1E2535] rounded-xl shadow-sm">
+        <div className="w-full overflow-x-auto rounded-t-xl">
+          <table className="w-full text-left border-collapse text-xs min-w-[1450px]">
             <thead>
               <tr className="border-b border-[#1E2535] bg-[#0A0D15]/80 text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
                 <th className="py-3 px-3.5">Employee ID</th>
@@ -600,34 +592,18 @@ export const Employees: React.FC = () => {
           </table>
         </div>
 
-        {/* Server-Side Pagination Bar */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-[#1E2535] bg-[#0A0D15]/60 text-xs text-slate-400">
-          <div>
-            Showing <strong className="text-white">{employees.length ? (page - 1) * limit + 1 : 0}</strong> to{' '}
-            <strong className="text-white">{Math.min(page * limit, totalRecords)}</strong> of{' '}
-            <strong className="text-white">{totalRecords}</strong> recorded employees
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-            <span className="font-mono text-slate-300 px-2">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              Next
-            </Button>
-          </div>
+        {/* Server-Side Pagination Footer */}
+        <div className="sticky bottom-0 z-20 shadow-xl rounded-b-xl backdrop-blur-md">
+          <TablePaginationFooter
+            currentPage={page}
+            totalPages={totalPages}
+            totalRecords={totalRecords}
+            limit={limit}
+            onPageChange={setPage}
+            onLimitChange={handleLimitChange}
+            pageSizeOptions={[10, 25, 50, 100]}
+            recordLabel="employees"
+          />
         </div>
       </div>
 

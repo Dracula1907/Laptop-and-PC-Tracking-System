@@ -32,6 +32,7 @@ import { ClearanceDetail } from '../pages/ClearanceDetail';
 import { Documents } from '../pages/Documents';
 import { Retirement } from '../pages/Retirement';
 import { SecurityGate } from '../pages/SecurityGate';
+import { SiteLaptops } from '../pages/SiteLaptops';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -50,6 +51,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/assets/:id" element={<AssetDetail />} />
           <Route path="/assets/:id/edit" element={<AssetForm />} />
 
+          <Route path="/site-laptops" element={<SiteLaptops />} />
           <Route path="/assignments" element={<Assignments />} />
           <Route path="/transfers" element={<Transfers />} />
           <Route path="/returns" element={<Returns />} />
@@ -61,6 +63,10 @@ export const AppRoutes: React.FC = () => {
           <Route path="/documents" element={<Documents />} />
           <Route path="/retirements" element={<Retirement />} />
           <Route path="/security-gate" element={<SecurityGate />} />
+          <Route path="/qr-system" element={<SecurityGate />} />
+          <Route path="/qr" element={<SecurityGate />} />
+          <Route path="/qr-scanner" element={<SecurityGate />} />
+          <Route path="/gate" element={<SecurityGate />} />
 
           <Route path="/employees" element={<Employees />} />
           <Route path="/employees/:id" element={<EmployeeDetail />} />

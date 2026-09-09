@@ -1436,7 +1436,75 @@ export interface ScannedAssetData {
   } | null;
 }
 
+export type SiteLaptopEntryType = 'INVENTORY_LINKED' | 'MANUAL_ENTRY';
+export type SiteLaptopStatus = 'AT_SITE' | 'RETURNED' | 'IN_TRANSIT' | 'MAINTENANCE';
 
+export interface SiteLaptopHistory {
+  id: string;
+  siteLaptopId: string;
+  action: string;
+  fromSite?: string | null;
+  toSite?: string | null;
+  fromStatus?: SiteLaptopStatus | null;
+  toStatus?: SiteLaptopStatus | null;
+  eventDate: string;
+  notes?: string | null;
+  performedById?: string | null;
+  performedBy?: {
+    id: string;
+    username: string;
+  } | null;
+  createdAt: string;
+}
 
+export interface SiteLaptop {
+  id: string;
+  code: string;
+  entryType: SiteLaptopEntryType;
+  assetId?: string | null;
+  asset?: {
+    id: string;
+    assetCode: string;
+    companyAssetId?: string | null;
+    model: string;
+    manufacturer: string;
+    serialNumber?: string | null;
+    status: AssetStatus;
+  } | null;
+  laptopName: string;
+  assetIdDisplay: string;
+  qrCode?: string | null;
+  serialNumber?: string | null;
+  dispatchDate: string;
+  dispatchTime?: string | null;
+  destinationSite: string;
+  assignedTo?: string | null;
+  contactNumber?: string | null;
+  purpose?: string | null;
+  expectedReturn?: string | null;
+  actualReturn?: string | null;
+  status: SiteLaptopStatus;
+  remarks?: string | null;
+  createdById?: string | null;
+  createdBy?: {
+    id: string;
+    username: string;
+  } | null;
+  updatedById?: string | null;
+  updatedBy?: {
+    id: string;
+    username: string;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+  history?: SiteLaptopHistory[];
+}
 
-
+export interface SiteLaptopStats {
+  totalDispatches: number;
+  atSite: number;
+  returned: number;
+  inTransit: number;
+  maintenance: number;
+  uniqueLaptops: number;
+}

@@ -829,8 +829,35 @@ export const exportReportPDF = (
   doc.save(safeFilename);
 };
 
+/**
+ * Site Laptop Excel Exporter
+ * Generates an XLSX file containing site laptop dispatches, destination sites, statuses, and movement info.
+ */
+export const exportSiteLaptopsToExcel = (data: any[], customFilename?: string) => {
+  if (!data || data.length === 0) {
+    throw new Error('No Site Laptop records available to export.');
+  }
 
+  const rows = data.map((item) => ({
+    'Record Code': item.code,
+    'Entry Type': item.entryType === 'INVENTORY_LINKED' ? 'Inventory Linked' : 'Manual Entry',
+    'Laptop Name / Model': item.laptopName,
+    'Asset ID': item.assetIdDisplay,
+    'QR Code': item.qrCode || '—',
+    'Serial Number': item.serialNumber || '—',
+    'Dispatch Date': item.dispatchDate ? new Date(item.dispatchDate).toLocaleDateString('en-GB') : '—',
+    'Dispatch Time': item.dispatchTime || '—',
+    'Destination / Site': item.destinationSite,
+    'Assigned To': item.assignedTo || '—',
+    'Contact Number': item.contactNumber || '—',
+    'Purpose': item.purpose || '—',
+    'Expected Return': item.expectedReturn ? new Date(item.expectedReturn).toLocaleDateString('en-GB') : '—',
+    'Actual Return': item.actualReturn ? new Date(item.actualReturn).toLocaleDateString('en-GB') : '—',
+    'Status': item.status,
+    'Remarks': item.remarks || '—',
+  }));
 
-
-
-
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const filename = customFilename || `Faith_Automation_Site_Laptops_${dateStr}.xlsx`;
+  exportToExcel(rows, filename, 'Site Laptops');
+};

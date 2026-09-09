@@ -20,7 +20,9 @@ import {
 } from 'recharts';
 import api from '../services/api';
 import { useToast } from '../contexts/ToastContext';
+import { useTheme } from '../contexts/ThemeContext';
 
+/* ─── KPI Card ──────────────────────────────────────────────────────────── */
 /* ─── KPI Card ──────────────────────────────────────────────────────────── */
 interface KpiCardProps {
   color: string;
@@ -29,10 +31,11 @@ interface KpiCardProps {
   sub: string;
   tag?: string;
   icon: React.ReactNode;
+  isLight?: boolean;
   onClick: () => void;
 }
 
-const KpiCard: React.FC<KpiCardProps> = ({ color, label, value, sub, tag, icon, onClick }) => {
+const KpiCard: React.FC<KpiCardProps> = ({ color, label, value, sub, tag, icon, isLight, onClick }) => {
   const isRed = label === 'HIGH CRITICAL';
   const isGreen = label === 'ACTIVE';
 
@@ -59,30 +62,32 @@ const KpiCard: React.FC<KpiCardProps> = ({ color, label, value, sub, tag, icon, 
 
       {/* Corner tag */}
       {tag && (
-        <div className="absolute top-2 right-1.5 px-1 py-0.5 rounded text-[6.5px] font-mono font-bold"
+        <div className="absolute top-2 right-1.5 px-1 py-0.5 rounded text-[7px] font-mono font-bold tracking-tight"
           style={{ background: `${color}20`, border: `1px solid ${color}50`, color }}>
           {tag}
         </div>
       )}
 
       {/* Label */}
-      <span className="text-[8px] font-bold font-mono tracking-widest uppercase leading-none text-center w-full truncate px-0.5 mt-0.5"
+      <span className="text-[8.5px] font-bold tracking-wider uppercase leading-none text-center w-full truncate px-0.5 mt-0.5"
         style={{ color }}>
         {label}
       </span>
 
       {/* Value */}
-      <div className="font-black font-mono leading-none mt-1.5 tracking-tight"
+      <div className="font-extrabold font-mono leading-none mt-1.5 tracking-tight"
         style={{
           fontSize: '30px',
-          color: (isRed || isGreen) ? color : '#F0F4F8',
+          color: (isRed || isGreen) ? color : (isLight ? '#0F172A' : '#F8FAFC'),
           textShadow: (isRed || isGreen) ? `0 0 16px ${color}` : 'none',
         }}>
         {value}
       </div>
 
       {/* Sub */}
-      <span className="text-[7.5px] text-[#4A5568] font-mono mt-0.5 truncate w-full text-center">{sub}</span>
+      <span className={`text-[8px] font-semibold mt-0.5 truncate w-full text-center ${
+        isLight ? 'text-slate-600' : 'text-[#7B8490]'
+      }`}>{sub}</span>
 
       {/* Icon */}
       <div className="mt-2 flex items-center justify-center">
@@ -100,6 +105,8 @@ const KpiCard: React.FC<KpiCardProps> = ({ color, label, value, sub, tag, icon, 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { showToast } = useToast();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
 
   const [summary, setSummary] = useState<any>(null);
   const [charts, setCharts] = useState<any>(null);
@@ -374,7 +381,7 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-9 gap-1.5">
 
           {/* 1 – TOTAL ASSETS */}
-          <KpiCard color="#22C7D6" label="TOTAL ASSETS" value={top.totalAssets} sub="All Hardware"
+          <KpiCard color="#22C7D6" label="TOTAL ASSETS" value={top.totalAssets} sub="All Hardware" isLight={isLight}
             onClick={() => { setFilterType(''); setFilterStatus(''); setFilterAllocation(''); setFilterCriticality(''); }}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -388,7 +395,7 @@ export const Dashboard: React.FC = () => {
             }/>
 
           {/* 2 – ACTIVE */}
-          <KpiCard color="#10B981" label="ACTIVE" value={top.active} sub="Active"
+          <KpiCard color="#10B981" label="ACTIVE" value={top.active} sub="Active" isLight={isLight}
             onClick={() => setFilterStatus('Active')}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -402,7 +409,7 @@ export const Dashboard: React.FC = () => {
             }/>
 
           {/* 3 – INACTIVE */}
-          <KpiCard color="#D9962E" label="INACTIVE" value={top.inactive} sub="Standby"
+          <KpiCard color="#D9962E" label="INACTIVE" value={top.inactive} sub="Standby" isLight={isLight}
             onClick={() => setFilterStatus('Inactive')}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -415,7 +422,7 @@ export const Dashboard: React.FC = () => {
             }/>
 
           {/* 4 – ALLOCATED */}
-          <KpiCard color="#22C7D6" label="ALLOCATED" value={top.allocated} sub="In Active Use"
+          <KpiCard color="#22C7D6" label="ALLOCATED" value={top.allocated} sub="In Active Use" isLight={isLight}
             onClick={() => setFilterAllocation('Allocated')}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -432,7 +439,7 @@ export const Dashboard: React.FC = () => {
             }/>
 
           {/* 5 – NOT ALLOCATED */}
-          <KpiCard color="#D9962E" label="NOT ALLOCATED" value={top.notAllocated} sub="Ready in Stock" tag="SG71"
+          <KpiCard color="#D9962E" label="NOT ALLOCATED" value={top.notAllocated} sub="Ready in Stock" tag="SG71" isLight={isLight}
             onClick={() => setFilterAllocation('Not Allocated')}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -444,7 +451,7 @@ export const Dashboard: React.FC = () => {
             }/>
 
           {/* 6 – LAPTOPS */}
-          <KpiCard color="#58707A" label="LAPTOPS" value={top.laptops} sub="Mobile Units"
+          <KpiCard color="#58707A" label="LAPTOPS" value={top.laptops} sub="Mobile Units" isLight={isLight}
             onClick={() => setFilterType('Laptop')}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -457,7 +464,7 @@ export const Dashboard: React.FC = () => {
             }/>
 
           {/* 7 – OFFICE PCs */}
-          <KpiCard color="#58707A" label="OFFICE PCs" value={top.officePcs} sub="Desk Desktops"
+          <KpiCard color="#58707A" label="OFFICE PCs" value={top.officePcs} sub="Desk Desktops" isLight={isLight}
             onClick={() => setFilterType('Office PC')}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -470,7 +477,7 @@ export const Dashboard: React.FC = () => {
             }/>
 
           {/* 8 – WORK STATIONS */}
-          <KpiCard color="#43D7DE" label="WORK STATIONS" value={top.workstations} sub="Engineering"
+          <KpiCard color="#43D7DE" label="WORK STATIONS" value={top.workstations} sub="Engineering" isLight={isLight}
             onClick={() => setFilterType('Work Station')}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -485,7 +492,7 @@ export const Dashboard: React.FC = () => {
             }/>
 
           {/* 9 – HIGH CRITICAL */}
-          <KpiCard color="#C53A43" label="HIGH CRITICAL" value={top.highCriticality} sub="Business Vital"
+          <KpiCard color="#C53A43" label="HIGH CRITICAL" value={top.highCriticality} sub="Business Vital" isLight={isLight}
             onClick={() => setFilterCriticality('High')}
             icon={
               <svg viewBox="0 0 44 44" className="w-10 h-10">
@@ -505,11 +512,11 @@ export const Dashboard: React.FC = () => {
 
           {/* Chart 1 – Assets by Type (Donut) */}
           <div className="rounded-xl border border-[#243040] overflow-hidden flex flex-col"
-            style={{ background: 'rgba(6,9,18,0.84)', backdropFilter: 'blur(10px)', minHeight: '200px' }}>
+            style={{ background: isLight ? '#FFFFFF' : 'rgba(6,9,18,0.84)', backdropFilter: 'blur(10px)', minHeight: '200px' }}>
             <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 border-b border-[#1C2840]">
               <div>
-                <h3 className="text-[10.5px] font-bold text-white font-mono">Chart 1: Assets by Type</h3>
-                <p className="text-[8.5px] text-[#4A5568] font-mono">Laptop, Office PC, Work Station</p>
+                <h3 className={`text-[11px] font-bold tracking-tight font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>Chart 1: Assets by Type</h3>
+                <p className={`text-[9px] font-medium font-sans ${isLight ? 'text-slate-600' : 'text-[#7B8490]'}`}>Laptop, Office PC, Work Station</p>
               </div>
               <MoreVertical className="w-3.5 h-3.5 text-[#2A3648]"/>
             </div>
@@ -534,17 +541,47 @@ export const Dashboard: React.FC = () => {
                       <Cell fill="#10B981" stroke="#21C98A" strokeWidth={1.5}/>
                       <Cell fill="#6B4FB8" stroke="#5A3FA0" strokeWidth={1.5}/>
                     </Pie>
-                    <Tooltip contentStyle={{ background: '#0A0E16', borderColor: '#243040', borderRadius: '8px', color: '#FFF', fontSize: '10px' }}/>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0];
+                          const rawType = (data.name || (data.payload && data.payload.type) || '') as string;
+                          const typeLabel = rawType === 'Work St.' ? 'Work Station' : rawType;
+                          const count = data.value;
+                          const dotColor = (data.payload?.fill || data.color || '#22C7D6') as string;
+                          return (
+                            <div
+                              className="px-2.5 py-1.5 rounded-lg border shadow-xl font-mono text-[10.5px] pointer-events-none z-50 flex items-center gap-1.5"
+                              style={{
+                                background: isLight ? '#FFFFFF' : '#0B101B',
+                                borderColor: isLight ? '#CBD5E1' : '#2A3648',
+                                color: isLight ? '#0F172A' : '#F8FAFC',
+                                boxShadow: isLight ? '0 4px 14px rgba(0,0,0,0.1)' : '0 4px 20px rgba(0,0,0,0.7)',
+                              }}
+                            >
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: dotColor, boxShadow: `0 0 6px ${dotColor}` }} />
+                              <span className="font-semibold">{typeLabel}</span>
+                              <span className="text-slate-400 font-bold">:</span>
+                              <span className="font-extrabold text-xs" style={{ color: dotColor }}>{count}</span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
               {/* Legend */}
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 space-y-1.5 text-[9px] font-mono z-20
-                bg-[#0A0E16]/90 p-1.5 rounded-lg border border-[#243040]">
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 space-y-1.5 text-[9.5px] font-sans z-20 p-1.5 rounded-lg border"
+                style={{
+                  background: isLight ? 'rgba(255,255,255,0.95)' : 'rgba(10,14,22,0.9)',
+                  borderColor: isLight ? '#E2E8F0' : '#243040'
+                }}>
                 {[['#22C7D6','Laptop'],['#10B981','Work St.'],['#6B4FB8','Office PC']].map(([c,l]) => (
                   <div key={l} className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ background: c, boxShadow: `0 0 5px ${c}` }}/>
-                    <span className="text-[#7B8899]">{l}</span>
+                    <span className={`font-semibold ${isLight ? 'text-slate-800' : 'text-[#CED1D5]'}`}>{l}</span>
                   </div>
                 ))}
               </div>
@@ -553,11 +590,11 @@ export const Dashboard: React.FC = () => {
 
           {/* Chart 2 – Assets by Status (Pillars) */}
           <div className="rounded-xl border border-[#243040] overflow-hidden flex flex-col"
-            style={{ background: 'rgba(6,9,18,0.84)', backdropFilter: 'blur(10px)', minHeight: '200px' }}>
+            style={{ background: isLight ? '#FFFFFF' : 'rgba(6,9,18,0.84)', backdropFilter: 'blur(10px)', minHeight: '200px' }}>
             <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 border-b border-[#1C2840]">
               <div>
-                <h3 className="text-[10.5px] font-bold text-white font-mono">Chart 2: Assets by Status</h3>
-                <p className="text-[8.5px] text-[#4A5568] font-mono">Active vs Inactive</p>
+                <h3 className={`text-[11px] font-bold tracking-tight font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>Chart 2: Assets by Status</h3>
+                <p className={`text-[9px] font-medium font-sans ${isLight ? 'text-slate-600' : 'text-[#7B8490]'}`}>Active vs Inactive</p>
               </div>
               <MoreVertical className="w-3.5 h-3.5 text-[#2A3648]"/>
             </div>
@@ -568,9 +605,9 @@ export const Dashboard: React.FC = () => {
               {/* Active pillar */}
               <div className="flex flex-col items-center">
                 <div className="text-center text-[7.5px] font-mono mb-1">
-                  <div className="text-[#10B981]">22.00</div>
-                  <div className="text-[#4A5568]">SGB1</div>
-                  <div className="text-[#C53A43] text-[6.5px]">error 33.5</div>
+                  <div className="text-[#10B981] font-semibold">22.00</div>
+                  <div className="text-[#4A5568] font-medium">SGB1</div>
+                  <div className="text-[#C53A43] text-[6.5px] font-medium">error 33.5</div>
                 </div>
                 <div className="relative w-14 flex flex-col justify-between p-1 rounded-t"
                   style={{
@@ -580,15 +617,15 @@ export const Dashboard: React.FC = () => {
                     boxShadow: '0 0 22px rgba(16,185,129,0.22)',
                   }}>
                   <div className="w-full h-2.5 rounded-sm" style={{ background: 'rgba(33,201,138,0.45)' }}/>
-                  <div className="text-center font-mono font-black text-white text-xl">{top.active}</div>
+                  <div className={`text-center font-mono font-extrabold text-xl ${isLight ? 'text-slate-900' : 'text-white'}`}>{top.active}</div>
                   <div className="w-full h-0.5 rounded-full bg-[#10B981]/40"/>
                 </div>
-                <span className="text-[8.5px] font-mono font-bold text-[#10B981] mt-1.5">Active</span>
+                <span className="text-[9px] font-bold text-[#10B981] mt-1.5 uppercase tracking-wider">Active</span>
               </div>
               {/* Inactive pillar */}
               <div className="flex flex-col items-center">
                 <div className="text-center text-[7.5px] font-mono mb-1">
-                  <div className="text-[#D9962E]">18.90</div>
+                  <div className="text-[#D9962E] font-semibold">18.90</div>
                 </div>
                 <div className="relative w-14 flex flex-col justify-between p-1 rounded-t"
                   style={{
@@ -598,21 +635,21 @@ export const Dashboard: React.FC = () => {
                     boxShadow: '0 0 16px rgba(217,150,46,0.18)',
                   }}>
                   <div className="w-full h-2 rounded-sm" style={{ background: 'rgba(230,161,58,0.45)' }}/>
-                  <div className="text-center font-mono font-black text-white text-lg">{top.inactive}</div>
+                  <div className={`text-center font-mono font-extrabold text-lg ${isLight ? 'text-slate-900' : 'text-white'}`}>{top.inactive}</div>
                   <div className="w-full h-0.5 rounded-full bg-[#D9962E]/40"/>
                 </div>
-                <span className="text-[8.5px] font-mono font-bold text-[#D9962E] mt-1.5">Inactive</span>
+                <span className="text-[9px] font-bold text-[#D9962E] mt-1.5 uppercase tracking-wider">Inactive</span>
               </div>
             </div>
           </div>
 
           {/* Chart 3 – Assets by Allocation (Pillars) */}
           <div className="rounded-xl border border-[#243040] overflow-hidden flex flex-col"
-            style={{ background: 'rgba(6,9,18,0.84)', backdropFilter: 'blur(10px)', minHeight: '200px' }}>
+            style={{ background: isLight ? '#FFFFFF' : 'rgba(6,9,18,0.84)', backdropFilter: 'blur(10px)', minHeight: '200px' }}>
             <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 border-b border-[#1C2840]">
               <div>
-                <h3 className="text-[10.5px] font-bold text-white font-mono">Chart 3: Assets by Allocation</h3>
-                <p className="text-[8.5px] text-[#4A5568] font-mono">Allocated vs Not Allocated</p>
+                <h3 className={`text-[11px] font-bold tracking-tight font-sans ${isLight ? 'text-slate-900' : 'text-white'}`}>Chart 3: Assets by Allocation</h3>
+                <p className={`text-[9px] font-medium font-sans ${isLight ? 'text-slate-600' : 'text-[#7B8490]'}`}>Allocated vs Not Allocated</p>
               </div>
               <MoreVertical className="w-3.5 h-3.5 text-[#2A3648]"/>
             </div>
@@ -626,8 +663,8 @@ export const Dashboard: React.FC = () => {
               {/* Allocated pillar */}
               <div className="flex flex-col items-center">
                 <div className="text-center text-[7.5px] font-mono mb-1">
-                  <div className="text-[#22C7D6]">-18.30</div>
-                  <div className="text-[#4A5568]">-0.5-25</div>
+                  <div className="text-[#22C7D6] font-semibold">-18.30</div>
+                  <div className="text-[#4A5568] font-medium">-0.5-25</div>
                 </div>
                 <div className="relative w-14 flex flex-col justify-between p-1 rounded-t"
                   style={{
@@ -637,16 +674,16 @@ export const Dashboard: React.FC = () => {
                     boxShadow: '0 0 22px rgba(34,199,214,0.22)',
                   }}>
                   <div className="w-full h-2.5 rounded-sm" style={{ background: 'rgba(67,215,222,0.45)' }}/>
-                  <div className="text-center font-mono font-black text-white text-xl">{top.allocated}</div>
+                  <div className={`text-center font-mono font-extrabold text-xl ${isLight ? 'text-slate-900' : 'text-white'}`}>{top.allocated}</div>
                   <div className="w-full h-0.5 rounded-full bg-[#22C7D6]/40"/>
                 </div>
-                <span className="text-[8.5px] font-mono font-bold text-[#22C7D6] mt-1.5">Allocated</span>
+                <span className="text-[9px] font-bold text-[#22C7D6] mt-1.5 uppercase tracking-wider">Allocated</span>
               </div>
               {/* Not Allocated pillar */}
               <div className="flex flex-col items-center">
                 <div className="text-center text-[7.5px] font-mono mb-1">
-                  <div className="text-[#D9962E]">-12.55</div>
-                  <div className="text-[#4A5568]">-403-35</div>
+                  <div className="text-[#D9962E] font-semibold">-12.55</div>
+                  <div className="text-[#4A5568] font-medium">-403-35</div>
                 </div>
                 <div className="relative w-14 flex flex-col justify-between p-1 rounded-t"
                   style={{
@@ -656,10 +693,10 @@ export const Dashboard: React.FC = () => {
                     boxShadow: '0 0 16px rgba(107,79,184,0.22)',
                   }}>
                   <div className="w-full h-2 rounded-sm" style={{ background: 'rgba(107,79,184,0.45)' }}/>
-                  <div className="text-center font-mono font-black text-white text-lg">{top.notAllocated}</div>
+                  <div className={`text-center font-mono font-extrabold text-lg ${isLight ? 'text-slate-900' : 'text-white'}`}>{top.notAllocated}</div>
                   <div className="w-full h-0.5 rounded-full bg-[#6B4FB8]/40"/>
                 </div>
-                <span className="text-[8.5px] font-mono font-bold text-[#8A7BC0] mt-1.5">Not Alloc.</span>
+                <span className="text-[9px] font-bold text-[#8A7BC0] mt-1.5 uppercase tracking-wider">Not Alloc.</span>
               </div>
             </div>
           </div>
@@ -674,7 +711,7 @@ export const Dashboard: React.FC = () => {
               <ChevronLeft className="w-3 h-3"/>
             </button>
             <button onClick={() => setShowTable(!showTable)}
-              className={`px-2.5 py-0.5 rounded-full text-[9px] font-mono flex items-center gap-1.5 transition-colors ${
+              className={`px-2.5 py-0.5 rounded-full text-[9.5px] font-semibold flex items-center gap-1.5 transition-colors ${
                 showTable ? 'bg-[#22C7D6]/20 text-[#22C7D6] border border-[#22C7D6]/40' : 'text-[#4A5568] hover:text-white'
               }`}>
               <TableIcon className="w-2.5 h-2.5"/>
@@ -685,7 +722,7 @@ export const Dashboard: React.FC = () => {
               <RefreshCw className="w-3 h-3"/>
             </button>
             <button onClick={handleExportExcel}
-              className="px-2 py-0.5 rounded-full text-[9px] font-mono text-[#CED1D5] hover:text-white border border-[#243040] flex items-center gap-1 transition-colors"
+              className="px-2.5 py-0.5 rounded-full text-[9.5px] font-semibold text-[#CED1D5] hover:text-white border border-[#243040] flex items-center gap-1 transition-colors"
               style={{ background: 'rgba(18,24,38,0.9)' }}>
               <Download className="w-2.5 h-2.5 text-[#22C7D6]"/>
               <span>Export</span>
@@ -703,35 +740,35 @@ export const Dashboard: React.FC = () => {
             style={{ background: 'rgba(6,9,18,0.92)' }}>
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-2.5 border-b border-[#1C2840]">
               <div>
-                <h2 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                <h2 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
                   Complete IT Asset Inventory
-                  <span className="px-2 py-0.5 rounded border text-[10px] text-[#22C7D6] border-[#243040]"
+                  <span className="px-2 py-0.5 rounded border text-[10px] font-semibold font-mono text-[#22C7D6] border-[#243040]"
                     style={{ background: 'rgba(8,12,20,0.8)' }}>
                     {filteredAssets.length} of {assets.length} Records
                   </span>
                 </h2>
-                <p className="text-[10px] text-[#4A5568] mt-0.5">1:1 Representation of organizational Excel workbook</p>
+                <p className="text-[10px] font-medium text-[#7B8490] mt-0.5">1:1 Representation of organizational Excel workbook</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => navigate('/imports')}
-                  className="px-3 py-1 rounded-lg border border-[#243040] text-white text-xs font-mono flex items-center gap-1.5 transition-colors hover:border-[#22C7D6]"
+                  className="px-3 py-1 rounded-lg border border-[#243040] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors hover:border-[#22C7D6]"
                   style={{ background: 'rgba(10,14,22,0.9)' }}>
                   <UploadCloud className="w-3 h-3 text-[#22C7D6]"/>Import Excel
                 </button>
                 <button onClick={handleExportExcel}
-                  className="px-3 py-1 rounded-lg border border-[#243040] text-[#CED1D5] text-xs font-mono flex items-center gap-1.5 transition-colors hover:border-[#22C7D6]"
+                  className="px-3 py-1 rounded-lg border border-[#243040] text-[#CED1D5] text-xs font-semibold flex items-center gap-1.5 transition-colors hover:border-[#22C7D6]"
                   style={{ background: 'rgba(10,14,22,0.9)' }}>
                   <Download className="w-3 h-3 text-[#22C7D6]"/>Export 16-Col
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 px-4 py-2 border-b border-[#1C2840] text-xs font-mono">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 px-4 py-2 border-b border-[#1C2840] text-xs">
               <div className="sm:col-span-2 relative">
-                <Search className="w-3.5 h-3.5 text-[#2A3648] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
+                <Search className="w-3.5 h-3.5 text-[#5A6880] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"/>
                 <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                   placeholder="Search Asset ID, Holder, Serial, IP..."
-                  className="w-full border border-[#243040] rounded-lg pl-8 pr-3 py-1 text-[#CED1D5] placeholder-[#2A3648] focus:outline-none focus:border-[#22C7D6]"
+                  className="w-full border border-[#243040] rounded-lg pl-8 pr-3 py-1 text-[#CED1D5] font-medium text-xs placeholder:font-normal placeholder-[#5A6880] focus:outline-none focus:border-[#22C7D6]"
                   style={{ background: 'rgba(8,12,20,0.8)' }}/>
               </div>
               {[
@@ -741,7 +778,7 @@ export const Dashboard: React.FC = () => {
                 { v: filterCriticality, fn: setFilterCriticality, opts: [['','All Criticality'],['High','High'],['Medium','Medium']] },
               ].map((s, i) => (
                 <select key={i} value={s.v} onChange={e => s.fn(e.target.value)}
-                  className="border border-[#243040] rounded-lg px-2 py-1 text-[#CED1D5] focus:outline-none focus:border-[#22C7D6]"
+                  className="border border-[#243040] rounded-lg px-2 py-1 text-[#CED1D5] font-medium text-xs focus:outline-none focus:border-[#22C7D6]"
                   style={{ background: 'rgba(8,12,20,0.8)' }}>
                   {s.opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
@@ -749,8 +786,8 @@ export const Dashboard: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto max-h-[380px]">
-              <table className="w-full text-left text-xs border-collapse font-mono whitespace-nowrap">
-                <thead className="sticky top-0 border-b border-[#243040] text-[9px] text-[#4A5568] uppercase tracking-wider"
+              <table className="w-full text-left text-xs border-collapse whitespace-nowrap">
+                <thead className="sticky top-0 border-b border-[#243040] text-[9.5px] font-bold text-[#7B8490] uppercase tracking-wider font-sans"
                   style={{ background: 'rgba(8,12,20,0.98)' }}>
                   <tr>
                     {['#','Asset ID','Asset Name','Description','Serial','Type','Status','Location','Allocation','Criticality','Employee','LAN IP','RAM','Date Alloc','Date Dealloc','CPU','LAN MAC'].map(h => (
@@ -762,29 +799,29 @@ export const Dashboard: React.FC = () => {
                   {filteredAssets.map((asset, index) => (
                     <tr key={asset.id} onClick={() => navigate(`/assets/${asset.id}`)}
                       className="cursor-pointer transition-colors hover:bg-[#0F1520]/80">
-                      <td className="py-1.5 px-3 text-[#2A3648]">{index + 1}</td>
-                      <td className="py-1.5 px-3 font-bold text-[#22C7D6] hover:underline">{asset.companyAssetId}</td>
-                      <td className="py-1.5 px-3 text-white font-medium font-sans">{asset.assetName}</td>
-                      <td className="py-1.5 px-3 text-[#4A5568] font-sans">{asset.assetDescription || '—'}</td>
-                      <td className="py-1.5 px-3 text-[#CED1D5]">{asset.serialNumber || '—'}</td>
+                      <td className="py-1.5 px-3 text-[#5A6880] font-mono text-xs font-medium">{index + 1}</td>
+                      <td className="py-1.5 px-3 font-semibold font-mono text-[#22C7D6] hover:underline text-xs">{asset.companyAssetId}</td>
+                      <td className="py-1.5 px-3 text-white font-semibold font-sans text-xs">{asset.assetName}</td>
+                      <td className="py-1.5 px-3 text-[#7B8490] font-sans text-xs font-normal">{asset.assetDescription || '—'}</td>
+                      <td className="py-1.5 px-3 text-[#CED1D5] font-mono text-xs font-medium">{asset.serialNumber || '—'}</td>
                       <td className="py-1.5 px-3">
-                        <span className="px-2 py-0.5 rounded border border-[#243040] text-[#CED1D5] text-[9px]"
+                        <span className="px-2 py-0.5 rounded border border-[#243040] text-[#CED1D5] text-[9.5px] font-mono font-medium"
                           style={{ background: 'rgba(8,12,20,0.8)' }}>
                           {asset.sourceAssetType || asset.assetType}
                         </span>
                       </td>
                       <td className="py-1.5 px-3">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                        <span className={`px-2 py-0.5 rounded text-[9.5px] font-bold font-mono ${
                           asset.sourceAssetStatus === 'Active'
                             ? 'text-[#10B981] border border-[#10B981]/30'
-                            : 'text-[#4A5568] border border-[#243040]'
+                            : 'text-[#7B8490] border border-[#243040]'
                         }`} style={{ background: asset.sourceAssetStatus === 'Active' ? 'rgba(16,185,129,0.1)' : 'rgba(18,26,40,0.8)' }}>
                           {asset.sourceAssetStatus}
                         </span>
                       </td>
-                      <td className="py-1.5 px-3 text-white font-sans">{asset.location}</td>
+                      <td className="py-1.5 px-3 text-white font-sans text-xs font-medium">{asset.location}</td>
                       <td className="py-1.5 px-3">
-                        <span className={`px-2 py-0.5 rounded text-[9px] ${
+                        <span className={`px-2 py-0.5 rounded text-[9.5px] font-semibold font-mono ${
                           asset.sourceAllocationStatus === 'Allocated'
                             ? 'text-[#22C7D6] border border-[#22C7D6]/30'
                             : 'text-[#D9962E] border border-[#D9962E]/30'
@@ -794,22 +831,22 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="py-1.5 px-3">
                         {asset.criticality === 'High' ? (
-                          <span className="px-2 py-0.5 rounded text-[#C53A43] border border-[#C53A43]/30 font-bold text-[9px]"
+                          <span className="px-2 py-0.5 rounded text-[#C53A43] border border-[#C53A43]/30 font-bold font-mono text-[9.5px]"
                             style={{ background: 'rgba(197,58,67,0.12)' }}>High</span>
                         ) : asset.criticality === 'Medium' ? (
-                          <span className="px-2 py-0.5 rounded text-[#22C7D6] border border-[#243040] text-[9px]"
+                          <span className="px-2 py-0.5 rounded text-[#22C7D6] border border-[#243040] font-medium font-mono text-[9.5px]"
                             style={{ background: 'rgba(8,12,20,0.8)' }}>Medium</span>
                         ) : (
-                          <span className="text-[#2A3648]">—</span>
+                          <span className="text-[#5A6880]">—</span>
                         )}
                       </td>
-                      <td className="py-1.5 px-3 text-white font-sans">{asset.employeeNameSource || asset.currentHolder?.fullName || <span className="text-[#2A3648]">—</span>}</td>
-                      <td className="py-1.5 px-3 text-[#CED1D5]">{asset.lanIp || <span className="text-[#2A3648]">—</span>}</td>
-                      <td className="py-1.5 px-3 text-[#CED1D5]">{asset.ram || <span className="text-[#2A3648]">—</span>}</td>
-                      <td className="py-1.5 px-3 text-[#4A5568]">{asset.dateOfAllocation ? new Date(asset.dateOfAllocation).toLocaleDateString() : '—'}</td>
-                      <td className="py-1.5 px-3 text-[#2A3648]">{asset.dateOfDeallocation ? new Date(asset.dateOfDeallocation).toLocaleDateString() : '—'}</td>
-                      <td className="py-1.5 px-3 font-bold text-[#22C7D6]">{asset.cpu || <span className="text-[#2A3648]">—</span>}</td>
-                      <td className="py-1.5 px-3 text-[#2A3648]">{asset.lanMacAddress || '—'}</td>
+                      <td className="py-1.5 px-3 text-white font-sans text-xs font-medium">{asset.employeeNameSource || asset.currentHolder?.fullName || <span className="text-[#5A6880]">—</span>}</td>
+                      <td className="py-1.5 px-3 text-[#CED1D5] font-mono text-xs font-medium">{asset.lanIp || <span className="text-[#5A6880]">—</span>}</td>
+                      <td className="py-1.5 px-3 text-[#CED1D5] font-mono text-xs font-medium">{asset.ram || <span className="text-[#5A6880]">—</span>}</td>
+                      <td className="py-1.5 px-3 text-[#7B8490] font-mono text-xs font-medium">{asset.dateOfAllocation ? new Date(asset.dateOfAllocation).toLocaleDateString() : '—'}</td>
+                      <td className="py-1.5 px-3 text-[#5A6880] font-mono text-xs font-normal">{asset.dateOfDeallocation ? new Date(asset.dateOfDeallocation).toLocaleDateString() : '—'}</td>
+                      <td className="py-1.5 px-3 font-semibold font-mono text-[#22C7D6] text-xs">{asset.cpu || <span className="text-[#5A6880]">—</span>}</td>
+                      <td className="py-1.5 px-3 text-[#5A6880] font-mono text-xs font-normal">{asset.lanMacAddress || '—'}</td>
                     </tr>
                   ))}
                   {filteredAssets.length === 0 && (

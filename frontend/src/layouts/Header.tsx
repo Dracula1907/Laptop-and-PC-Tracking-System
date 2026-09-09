@@ -12,6 +12,7 @@ import {
   Moon,
   ExternalLink,
   CheckCheck,
+  QrCode,
 } from 'lucide-react';
 import api from '../services/api';
 import { Notification } from '../types';
@@ -116,6 +117,16 @@ export const Header: React.FC<HeaderProps> = ({ collapsed, setCollapsed }) => {
 
       {/* Right: Theme Toggle, Notifications, User Avatar */}
       <div className="flex items-center space-x-2.5 sm:space-x-3.5">
+        {/* QR System / Scanner Quick Access */}
+        <button
+          onClick={() => navigate('/security-gate')}
+          aria-label="QR Tracking & Security Gate Terminal"
+          title="QR Tracking & Security Gate Terminal"
+          className="w-8 h-8 rounded-lg bg-[#191E27] border border-[#313C4A] hover:border-cyan-500/50 hover:bg-cyan-950/20 flex items-center justify-center text-cyan-400 hover:text-cyan-300 transition-colors relative focus:outline-none focus:ring-1 focus:ring-cyan-400/50"
+        >
+          <QrCode className="w-4 h-4" />
+        </button>
+
         {/* Theme Toggle Button */}
         <button
           onClick={toggleTheme}
@@ -263,11 +274,11 @@ export const Header: React.FC<HeaderProps> = ({ collapsed, setCollapsed }) => {
             </div>
 
             <div className="hidden sm:block text-left pr-1">
-              <p className="text-xs font-bold text-white leading-none font-mono">
+              <p className="text-xs font-bold text-white leading-none font-sans">
                 {user?.username || 'admin'}
               </p>
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mt-0.5 font-mono">
-                {user?.role?.code || 'ADMIN'}
+              <span className="text-[9.5px] font-semibold text-slate-400 uppercase tracking-wider block mt-0.5 font-sans">
+                {user?.role?.name || user?.role?.code || 'Administrator'}
               </span>
             </div>
 

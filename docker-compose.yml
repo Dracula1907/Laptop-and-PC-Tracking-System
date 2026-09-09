@@ -1,4 +1,5 @@
 version: '3.8'
+name: faith-it-inventory
 
 services:
   postgres:
@@ -61,8 +62,8 @@ services:
     container_name: itam-nginx
     restart: always
     ports:
-      - "80:80"
-      - "3000:80"
+      - "${ITAM_HTTP_PORT:-80}:80"
+      - "${ITAM_WEB_PORT:-3000}:80"
     depends_on:
       - frontend
       - backend
@@ -71,8 +72,10 @@ services:
 
 networks:
   itam-network:
+    name: faith-it-inventory_network
     driver: bridge
 
 volumes:
   postgres_data:
+    name: faith-it-inventory_postgres_data
     driver: local

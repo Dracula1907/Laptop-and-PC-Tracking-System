@@ -420,6 +420,9 @@ model User {
   qrCodesRevoked       AssetQrCode[]     @relation("QrRevokedByRelation")
   qrCodesReplaced      AssetQrCode[]     @relation("QrReplacedByRelation")
   gateMovementsGuarded GateMovement[]    @relation("GateGuardUserRelation")
+  siteLaptopsCreated   SiteLaptop[]      @relation("SiteLaptopCreatedByRelation")
+  siteLaptopsUpdated   SiteLaptop[]      @relation("SiteLaptopUpdatedByRelation")
+  siteLaptopHistories  SiteLaptopHistory[] @relation("SiteLaptopHistoryUserRelation")
 }
 
 model Department {
@@ -611,6 +614,7 @@ model Asset {
   gatePresence            GatePresence             @default(INSIDE)
   qrCodes                 AssetQrCode[]
   gateMovements           GateMovement[]
+  siteLaptops             SiteLaptop[]             @relation("AssetSiteLaptopsRelation")
 
 
   @@index([assetCode])
@@ -1472,5 +1476,76 @@ model GateMovement {
   @@index([relatedMovementId])
 }
 
+enum SiteLaptopEntryType {
+  INVENTORY_LINKED
+  MANUAL_ENTRY
+}
 
+enum SiteLaptopStatus {
+  AT_SITE
+  RETURNED
+  IN_TRANSIT
+  MAINTENANCE
+}
 
+model SiteLaptop {
+  id               String               @id @default(uuid())
+  code             String               @unique
+  entryType        SiteLaptopEntryType  @default(INVENTORY_LINKED)
+  
+  assetId          String?
+  asset            Asset?               @relation("AssetSiteLaptopsRelation", fields: [assetId], references: [id], onDelete: SetNull)
+  
+  laptopName       String
+  assetIdDisplay   String
+  qrCode           String?
+  serialNumber     String?
+  
+  dispatchDate     DateTime
+  dispatchTime     String?
+  destinationSite  String
+  assignedTo       String?
+  contactNumber    String?
+  purpose          String?
+  expectedReturn   DateTime?
+  actualReturn     DateTime?
+  
+  status           SiteLaptopStatus     @default(AT_SITE)
+  remarks          String?
+  
+  createdById      String?
+  createdBy        User?                @relation("SiteLaptopCreatedByRelation", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById      String?
+  updatedBy        User?                @relation("SiteLaptopUpdatedByRelation", fields: [updatedById], references: [id], onDelete: SetNull)
+  
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  
+  history          SiteLaptopHistory[]
+
+  @@index([code])
+  @@index([assetId])
+  @@index([assetIdDisplay])
+  @@index([status])
+  @@index([destinationSite])
+  @@index([dispatchDate])
+}
+
+model SiteLaptopHistory {
+  id              String            @id @default(uuid())
+  siteLaptopId    String
+  siteLaptop      SiteLaptop        @relation(fields: [siteLaptopId], references: [id], onDelete: Cascade)
+  action          String
+  fromSite        String?
+  toSite          String?
+  fromStatus      SiteLaptopStatus?
+  toStatus        SiteLaptopStatus?
+  eventDate       DateTime          @default(now())
+  notes           String?
+  performedById   String?
+  performedBy     User?             @relation("SiteLaptopHistoryUserRelation", fields: [performedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime          @default(now())
+
+  @@index([siteLaptopId])
+  @@index([eventDate])
+}

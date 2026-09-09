@@ -25,6 +25,7 @@ import {
   PowerOff,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { TablePaginationFooter } from '../components/TablePaginationFooter';
 
 export const Locations: React.FC = () => {
   const navigate = useNavigate();
@@ -119,6 +120,15 @@ export const Locations: React.FC = () => {
     };
     fetchDepts();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
+
+  const handleLimitChange = (newLimit: number) => {
+    setLimit(newLimit);
+    setPage(1);
+  };
 
   useEffect(() => {
     fetchLocations();
@@ -226,7 +236,7 @@ export const Locations: React.FC = () => {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 pb-12 sm:pb-16">
       <PageHeader
         title="Office & Facility Locations"
         subtitle="Manage physical corporate facilities, office branches, zones, and equipment distribution."
@@ -339,31 +349,12 @@ export const Locations: React.FC = () => {
             />
           </div>
         </div>
-
-        <div className="flex items-center gap-3 text-xs text-slate-400">
-          <span>Rows:</span>
-          <select
-            value={limit}
-            onChange={(e) => {
-              setLimit(Number(e.target.value));
-              setPage(1);
-            }}
-            className="bg-[#121624] border border-[#2B3550] rounded px-2 py-1 text-slate-200 text-xs outline-none"
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-          <span className="font-mono">
-            Total: <strong className="text-white">{totalRecords}</strong>
-          </span>
-        </div>
       </div>
 
       {/* 11-Column Table */}
-      <div className="bg-[#0E131F] border border-[#1E2535] rounded-xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto min-w-[1350px]">
-          <table className="w-full text-left border-collapse text-xs">
+      <div className="relative bg-[#0E131F] border border-[#1E2535] rounded-xl shadow-sm">
+        <div className="w-full overflow-x-auto rounded-t-xl">
+          <table className="w-full text-left border-collapse text-xs min-w-[1280px]">
             <thead>
               <tr className="border-b border-[#1E2535] bg-[#0A0D15]/80 text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">
                 <th className="py-3 px-3.5">Location Code</th>
@@ -475,34 +466,18 @@ export const Locations: React.FC = () => {
           </table>
         </div>
 
-        {/* Pagination Bar */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-[#1E2535] bg-[#0A0D15]/60 text-xs text-slate-400">
-          <div>
-            Showing <strong className="text-white">{locations.length ? (page - 1) * limit + 1 : 0}</strong> to{' '}
-            <strong className="text-white">{Math.min(page * limit, totalRecords)}</strong> of{' '}
-            <strong className="text-white">{totalRecords}</strong> locations
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-            <span className="font-mono text-slate-300 px-2">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              Next
-            </Button>
-          </div>
+        {/* Table Pagination Footer */}
+        <div className="sticky bottom-0 z-20 shadow-xl rounded-b-xl backdrop-blur-md">
+          <TablePaginationFooter
+            currentPage={page}
+            totalPages={totalPages}
+            totalRecords={totalRecords}
+            limit={limit}
+            onPageChange={setPage}
+            onLimitChange={handleLimitChange}
+            pageSizeOptions={[10, 25, 50, 100]}
+            recordLabel="locations"
+          />
         </div>
       </div>
 
