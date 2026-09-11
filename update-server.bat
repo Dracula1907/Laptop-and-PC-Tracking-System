@@ -157,7 +157,7 @@ echo Branch: %CURRENT_BRANCH% Commit: %PREV_COMMIT% >> "%LOG_FILE%"
 
 REM SAFETY: Verify worktree clean
 set "STATUS_TMP=%TEMP%\itam_git_status_%TIMESTAMP%.tmp"
-git status --porcelain > "%STATUS_TMP%" 2>&1
+git status --porcelain -uno > "%STATUS_TMP%" 2>&1
 for %%A in ("%STATUS_TMP%") do set "STATUS_SIZE=%%~zA"
 if %STATUS_SIZE% gtr 0 (
     echo.

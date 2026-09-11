@@ -23,6 +23,9 @@ postgres_data/
 backend/prisma/*.db
 backend/prisma/*.db-journal
 backups/
+*.sql
+.claude/
+**/.claude/
 
 # Logs
 logs/
