@@ -8,9 +8,18 @@ async function main() {
   console.log('EXECUTING OFFICIAL ASSET LIST IMPORT INTO POSTGRESQL');
   console.log('====================================================\n');
 
-  const excelPath = path.resolve(__dirname, '../../data/ASSET LIST.xls');
-  if (!fs.existsSync(excelPath)) {
-    console.error(`ERROR: Official file not found at ${excelPath}`);
+  const candidatePaths = [
+    path.resolve(__dirname, '../../data/ASSET LIST.xls'),
+    path.resolve(__dirname, '../data/ASSET LIST.xls'),
+    path.resolve(__dirname, '../../ASSET LIST.xls'),
+    path.resolve(__dirname, './data/ASSET LIST.xls'),
+    path.resolve(process.cwd(), 'data/ASSET LIST.xls'),
+    path.resolve(process.cwd(), 'backend/data/ASSET LIST.xls'),
+    path.resolve(process.cwd(), '../data/ASSET LIST.xls'),
+  ];
+  const excelPath = candidatePaths.find((p) => fs.existsSync(p));
+  if (!excelPath) {
+    console.error(`ERROR: Official file ASSET LIST.xls not found in candidate paths.`);
     process.exit(1);
   }
 

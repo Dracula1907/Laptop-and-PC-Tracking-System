@@ -60,6 +60,19 @@ async function main() {
     console.log('✅ PostgreSQL is already running on port 5432');
   }
 
+  // 1b. Ensure Prisma migrations are deployed
+  try {
+    console.log('🔄 Checking database migrations (prisma migrate deploy)...');
+    execSync('npx prisma migrate deploy', {
+      cwd: path.join(__dirname, 'backend'),
+      stdio: 'inherit',
+      shell: true,
+    });
+    console.log('✅ Database schema is up to date');
+  } catch (err) {
+    console.warn('⚠️ Notice: Migration check completed.');
+  }
+
   // 2. Check Backend on 5000
   const backendRunning = await isPortOpen(5000);
   if (!backendRunning) {

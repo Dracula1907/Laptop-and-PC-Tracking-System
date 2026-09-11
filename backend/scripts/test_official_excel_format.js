@@ -46,8 +46,17 @@ async function runTests() {
 
   try {
     // TEST 1: File Existence & Basic Read
-    const excelPath = path.resolve(__dirname, '../../data/ASSET LIST.xls');
-    assert(fs.existsSync(excelPath), 'Test 1: Official Excel file exists at data/ASSET LIST.xls');
+    const candidatePaths = [
+      path.resolve(__dirname, '../../data/ASSET LIST.xls'),
+      path.resolve(__dirname, '../data/ASSET LIST.xls'),
+      path.resolve(__dirname, '../../ASSET LIST.xls'),
+      path.resolve(__dirname, './data/ASSET LIST.xls'),
+      path.resolve(process.cwd(), 'data/ASSET LIST.xls'),
+      path.resolve(process.cwd(), 'backend/data/ASSET LIST.xls'),
+      path.resolve(process.cwd(), '../data/ASSET LIST.xls'),
+    ];
+    const excelPath = candidatePaths.find((p) => fs.existsSync(p));
+    assert(!!excelPath, 'Test 1: Official Excel file exists at data/ASSET LIST.xls');
 
     const workbook = xlsx.readFile(excelPath);
     const sheetName = workbook.SheetNames[0];
