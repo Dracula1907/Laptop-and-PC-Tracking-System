@@ -572,6 +572,16 @@ model Asset {
   cpu                     String?                  // Direct CPU ("i3", "i5", "i7", "Xeon")
   lanMacAddress           String?                  // Direct LAN Mac Address or null
 
+  // New official 19-column Excel format additions (ASSET LIST.xls)
+  srNo                    Int?                     // "Sr. no." from Excel
+  make                    String?                  // "Make" from Excel (e.g. "Dell 3561", "DELL XPS")
+  wanIp                   String?                  // "WAN IP" from Excel
+  wanMacAddress           String?                  // "WAN Mac Address" from Excel
+  system                  String?                  // "System" from Excel (e.g. "Win11_x64")
+  warrantyStatus          String?                  // "Warranty Status" from Excel (e.g. "June 25-2017")
+  software                String?                  // "Software" from Excel (e.g. "Catia R-19", "E-PLAN")
+  msOffice                String?                  // "MS Office" from Excel (e.g. "Office 2016", "Office 2019")
+
   holderType              HolderType               @default(UNKNOWN)
   holderDisplayName       String?
   holderVerificationStatus HolderVerificationStatus @default(VERIFIED)
@@ -637,6 +647,11 @@ model Asset {
   @@index([lanIp])
   @@index([employeeNameSource])
   @@index([warrantyEnd])
+  @@index([srNo])
+  @@index([make])
+  @@index([wanIp])
+  @@index([wanMacAddress])
+  @@index([system])
 }
 
 model AssetSpecification {

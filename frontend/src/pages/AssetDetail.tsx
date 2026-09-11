@@ -513,6 +513,12 @@ export const AssetDetail: React.FC = () => {
   const deallocDateFormatted = asset.dateOfDeallocation
     ? new Date(asset.dateOfDeallocation).toLocaleDateString('en-GB')
     : '—';
+  const warrantyStartFormatted = asset.warrantyStart
+    ? new Date(asset.warrantyStart).toLocaleDateString('en-GB')
+    : '—';
+  const warrantyEndFormatted = asset.warrantyEnd
+    ? new Date(asset.warrantyEnd).toLocaleDateString('en-GB')
+    : '—';
 
   let rawDataParsed: any = null;
   try {
@@ -941,7 +947,7 @@ export const AssetDetail: React.FC = () => {
               : 'text-textSecondary hover:text-textPrimary hover:bg-bgElevated/40'
           }`}
         >
-          Asset Specifications & 16-Col Master
+          Asset Specifications & Master Data
         </button>
         <button
           onClick={() => setActiveTab('history')}
@@ -1129,96 +1135,133 @@ export const AssetDetail: React.FC = () => {
           </Card>
 
           <Card
-            title="Complete 16-Column Master Specifications"
-            subtitle="Authoritative hardware, network, and organizational allocation identity."
+            title="Official 19-Column Master Specifications"
+            subtitle="Authoritative hardware, network, software, and warranty specifications matching the official Excel registry."
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">1. Asset ID (FAA / Code)</span>
+                <span className="text-[10px] text-textSecondary uppercase block">1. Sr. no.</span>
+                <p className="text-sm font-mono text-textPrimary mt-0.5">{asset.srNo ?? '—'}</p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">2. Department</span>
+                <p className="text-sm font-semibold text-textPrimary mt-0.5">
+                  {asset.department?.name || asset.departmentName || asset.location || '—'}
+                </p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">3. User (Employee)</span>
+                <p className="text-sm font-bold text-textPrimary mt-0.5">
+                  {asset.employeeNameSource || asset.currentHolder?.fullName || asset.holderDisplayName || '—'}
+                </p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">4. Type</span>
+                <p className="text-sm font-semibold text-textPrimary mt-0.5">{asset.assetType || asset.sourceAssetType || 'LAPTOP'}</p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">5. Make</span>
+                <p className="text-sm font-bold text-textPrimary mt-0.5">{asset.make || asset.model || '—'}</p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">6. Serial No</span>
+                <p className="text-sm font-mono text-textPrimary mt-0.5">{asset.serialNumber || '—'}</p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">7. LAN IP</span>
+                <p className="text-sm font-medium text-textPrimary mt-0.5">{asset.lanIp || '—'}</p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">8. WAN IP</span>
+                <p className="text-sm font-medium text-textPrimary mt-0.5">{asset.wanIp || '—'}</p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">9. Asset ID (Company Key)</span>
                 <p className="text-sm font-bold text-brandPrimary font-mono mt-0.5">
                   {asset.companyAssetId || asset.assetCode}
                 </p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">2. Asset Type</span>
-                <p className="text-sm font-semibold text-textPrimary mt-0.5">{asset.assetType || 'LAPTOP'}</p>
+                <span className="text-[10px] text-textSecondary uppercase block">10. LAN Mac Address</span>
+                <p className="text-sm font-mono text-zinc-400 mt-0.5">{asset.lanMacAddress || '—'}</p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">3. Serial Number</span>
-                <p className="text-sm font-mono text-textPrimary mt-0.5">{asset.serialNumber || '—'}</p>
+                <span className="text-[10px] text-textSecondary uppercase block">11. WAN Mac Address</span>
+                <p className="text-sm font-mono text-zinc-400 mt-0.5">{asset.wanMacAddress || '—'}</p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">4. Model Name</span>
-                <p className="text-sm font-bold text-textPrimary mt-0.5">{asset.model || asset.assetName || '—'}</p>
+                <span className="text-[10px] text-textSecondary uppercase block">12. Warranty Start Date</span>
+                <p className="text-sm font-medium text-textPrimary mt-0.5">{warrantyStartFormatted}</p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">5. Location / Area</span>
-                <p className="text-sm font-bold text-brandPrimary mt-0.5">{asset.location || '—'}</p>
+                <span className="text-[10px] text-textSecondary uppercase block">13. Warranty End Date</span>
+                <p className="text-sm font-medium text-textPrimary mt-0.5">{warrantyEndFormatted}</p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">6. Laptop Number</span>
-                <p className="text-sm font-mono text-textPrimary mt-0.5">{asset.laptopNumber || '—'}</p>
+                <span className="text-[10px] text-textSecondary uppercase block">14. CPU</span>
+                <p className="text-sm font-bold text-textPrimary mt-0.5">{asset.cpu || asset.specifications?.processor || '—'}</p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">7. PC Number</span>
-                <p className="text-sm font-mono text-textPrimary mt-0.5">{asset.pcNumber || '—'}</p>
+                <span className="text-[10px] text-textSecondary uppercase block">15. RAM</span>
+                <p className="text-sm font-medium text-textPrimary mt-0.5">{asset.ram || asset.specifications?.ram || '—'}</p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">8. Status of Asset</span>
-                <p className={`text-sm font-bold mt-0.5 ${isAct ? 'text-emerald-400' : 'text-zinc-500'}`}>
-                  {asset.sourceAssetStatus || (isAct ? 'Active' : 'Inactive')}
-                </p>
+                <span className="text-[10px] text-textSecondary uppercase block">16. System</span>
+                <p className="text-sm font-semibold text-textPrimary mt-0.5">{asset.system || '—'}</p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">9. Criticality of Asset</span>
-                <p className={`text-sm font-bold mt-0.5 ${asset.criticality?.toLowerCase() === 'high' ? 'text-rose-400' : asset.criticality ? 'text-amber-400' : 'text-zinc-500'}`}>
-                  {asset.criticality || '—'}
-                </p>
+                <span className="text-[10px] text-textSecondary uppercase block">17. Warranty Status</span>
+                <p className="text-sm font-semibold text-indigo-400 mt-0.5">{asset.warrantyStatus || '—'}</p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">10. Employee Name</span>
+                <span className="text-[10px] text-textSecondary uppercase block">18. Software</span>
+                <p className="text-sm text-textPrimary mt-0.5 truncate" title={asset.software}>{asset.software || '—'}</p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">19. MS Office</span>
+                <p className="text-sm text-textPrimary mt-0.5 truncate" title={asset.msOffice}>{asset.msOffice || '—'}</p>
+              </div>
+
+              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
+                <span className="text-[10px] text-textSecondary uppercase block">Status & Criticality</span>
                 <p className="text-sm font-bold text-textPrimary mt-0.5">
-                  {asset.employeeNameSource || asset.holderDisplayName || '—'}
+                  <span className={isAct ? 'text-emerald-400' : 'text-zinc-500'}>
+                    {asset.sourceAssetStatus || (isAct ? 'Active' : 'Inactive')}
+                  </span>
+                  {asset.criticality && <span className="text-textSecondary ml-1 text-xs">({asset.criticality})</span>}
                 </p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">11. LAN IP</span>
-                <p className="text-sm font-medium text-textPrimary mt-0.5">{asset.lanIp || '—'}</p>
+                <span className="text-[10px] text-textSecondary uppercase block">Allocation History Dates</span>
+                <p className="text-xs text-textSecondary mt-0.5">
+                  Alloc: <strong className="text-textPrimary">{allocDateFormatted}</strong> | Dealloc: <span className="text-zinc-500">{deallocDateFormatted}</span>
+                </p>
               </div>
 
               <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">12. RAM</span>
-                <p className="text-sm font-medium text-textPrimary mt-0.5">{asset.ram || '—'}</p>
-              </div>
-
-              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">13. Date of allocation</span>
-                <p className="text-sm font-medium text-textPrimary mt-0.5">{allocDateFormatted}</p>
-              </div>
-
-              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">14. Date of deallocation</span>
-                <p className="text-sm font-medium text-zinc-500 mt-0.5">{deallocDateFormatted}</p>
-              </div>
-
-              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">15. CPU</span>
-                <p className="text-sm font-bold text-textPrimary mt-0.5">{asset.cpu || '—'}</p>
-              </div>
-
-              <div className="p-3 bg-bgBase border border-borderBase rounded-lg">
-                <span className="text-[10px] text-textSecondary uppercase block">16. LAN Mac Address</span>
-                <p className="text-sm font-medium text-zinc-500 mt-0.5">{asset.lanMacAddress || '—'}</p>
+                <span className="text-[10px] text-textSecondary uppercase block">Legacy Tracked Identifiers</span>
+                <p className="text-xs font-mono text-textSecondary mt-0.5">
+                  {asset.laptopNumber ? `Laptop #${asset.laptopNumber}` : ''} {asset.pcNumber ? `PC #${asset.pcNumber}` : ''} {!asset.laptopNumber && !asset.pcNumber ? '—' : ''}
+                </p>
               </div>
             </div>
           </Card>

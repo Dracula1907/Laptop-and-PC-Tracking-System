@@ -244,6 +244,13 @@ export class AssetService {
         { ram: { contains: s, mode: 'insensitive' } },
         { lanIp: { contains: s, mode: 'insensitive' } },
         { lanMacAddress: { contains: s, mode: 'insensitive' } },
+        { wanIp: { contains: s, mode: 'insensitive' } },
+        { wanMacAddress: { contains: s, mode: 'insensitive' } },
+        { make: { contains: s, mode: 'insensitive' } },
+        { system: { contains: s, mode: 'insensitive' } },
+        { software: { contains: s, mode: 'insensitive' } },
+        { msOffice: { contains: s, mode: 'insensitive' } },
+        { warrantyStatus: { contains: s, mode: 'insensitive' } },
         { sourceAssetType: { contains: s, mode: 'insensitive' } },
         { specifications: { processor: { contains: s, mode: 'insensitive' } } },
         { specifications: { ram: { contains: s, mode: 'insensitive' } } },
@@ -302,6 +309,21 @@ export class AssetService {
           break;
         case 'serialNumber':
           orderBy = { serialNumber: { sort: order, nulls: 'last' } };
+          break;
+        case 'make':
+          orderBy = { make: { sort: order, nulls: 'last' } };
+          break;
+        case 'system':
+          orderBy = { system: { sort: order, nulls: 'last' } };
+          break;
+        case 'wanIp':
+          orderBy = { wanIp: { sort: order, nulls: 'last' } };
+          break;
+        case 'wanMacAddress':
+          orderBy = { wanMacAddress: { sort: order, nulls: 'last' } };
+          break;
+        case 'srNo':
+          orderBy = { srNo: { sort: order, nulls: 'last' } };
           break;
         case 'dataQuality':
         case 'dataQualityStatus':

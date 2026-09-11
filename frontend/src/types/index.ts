@@ -230,9 +230,17 @@ export interface Asset {
   locationRel?: Location | string;
   employeeNameSource?: string;
   lanIp?: string;
+  wanIp?: string;
   ram?: string;
   cpu?: string;
   lanMacAddress?: string;
+  wanMacAddress?: string;
+  srNo?: number;
+  make?: string;
+  system?: string;
+  warrantyStatus?: string;
+  software?: string;
+  msOffice?: string;
   dateOfAllocation?: string;
   dateOfDeallocation?: string;
 

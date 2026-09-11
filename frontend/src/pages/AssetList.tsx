@@ -58,8 +58,16 @@ const DEFAULT_COLUMNS_VISIBILITY: Record<string, boolean> = {
   location: true,
   criticality: true,
   lanIp: false,
+  wanIp: false,
+  lanMacAddress: false,
+  wanMacAddress: false,
   ram: true,
   cpu: true,
+  make: false,
+  system: false,
+  warrantyStatus: false,
+  software: false,
+  msOffice: false,
   dataQuality: true,
   qrCode: true,
   gatePresence: true,
@@ -742,6 +750,98 @@ export const AssetList: React.FC = () => {
       },
     },
     {
+      key: 'make',
+      header: 'Make',
+      sortable: true,
+      sortKey: 'make',
+      className: 'w-24 min-w-[90px]',
+      render: (item) => (
+        <span className="text-xs text-textSecondary font-medium">
+          {item.make || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'wanIp',
+      header: 'WAN IP',
+      sortable: true,
+      sortKey: 'wanIp',
+      className: 'w-28 min-w-[120px]',
+      render: (item) => (
+        <span className="font-mono text-[11px] text-textSecondary">
+          {item.wanIp || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'lanMacAddress',
+      header: 'LAN MAC',
+      sortable: false,
+      className: 'w-32 min-w-[130px]',
+      render: (item) => (
+        <span className="font-mono text-[11px] text-textSecondary">
+          {item.lanMacAddress || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'wanMacAddress',
+      header: 'WAN MAC',
+      sortable: false,
+      className: 'w-32 min-w-[130px]',
+      render: (item) => (
+        <span className="font-mono text-[11px] text-textSecondary">
+          {item.wanMacAddress || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'system',
+      header: 'System',
+      sortable: true,
+      sortKey: 'system',
+      className: 'w-24 min-w-[90px]',
+      render: (item) => (
+        <span className="text-xs text-textSecondary">
+          {item.system || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'warrantyStatus',
+      header: 'Warranty Status',
+      sortable: true,
+      sortKey: 'warrantyStatus',
+      className: 'w-28 min-w-[110px]',
+      render: (item) => (
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-bgBase border border-borderBase text-indigo-300">
+          {item.warrantyStatus || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'software',
+      header: 'Software',
+      sortable: false,
+      className: 'min-w-[130px]',
+      render: (item) => (
+        <span className="text-xs text-textSecondary truncate max-w-[150px] block" title={item.software}>
+          {item.software || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'msOffice',
+      header: 'MS Office',
+      sortable: false,
+      className: 'min-w-[120px]',
+      render: (item) => (
+        <span className="text-xs text-textSecondary truncate max-w-[130px] block" title={item.msOffice}>
+          {item.msOffice || '—'}
+        </span>
+      ),
+    },
+    {
       key: 'dataQuality',
       header: 'Data Quality',
       sortable: true,
@@ -851,8 +951,16 @@ export const AssetList: React.FC = () => {
     { key: 'location', label: 'Location' },
     { key: 'criticality', label: 'Criticality' },
     { key: 'lanIp', label: 'LAN IP' },
+    { key: 'wanIp', label: 'WAN IP' },
+    { key: 'lanMacAddress', label: 'LAN MAC' },
+    { key: 'wanMacAddress', label: 'WAN MAC' },
     { key: 'ram', label: 'RAM' },
     { key: 'cpu', label: 'CPU' },
+    { key: 'make', label: 'Make' },
+    { key: 'system', label: 'System' },
+    { key: 'warrantyStatus', label: 'Warranty Status' },
+    { key: 'software', label: 'Software' },
+    { key: 'msOffice', label: 'MS Office' },
     { key: 'dataQuality', label: 'Data Quality' },
   ];
 

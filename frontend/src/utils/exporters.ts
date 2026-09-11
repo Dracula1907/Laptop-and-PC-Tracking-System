@@ -55,56 +55,56 @@ export const exportAssetsToCompanyExcel = (assets: any[], customFilename?: strin
     throw new Error('No assets available to export.');
   }
 
-  const rows = assets.map((a) => {
-    const dept = a.department?.name || a.location || '—';
-    const loc = a.locationRel?.name || a.location || '—';
-    const allocStatus =
-      a.sourceAllocationStatus ||
-      (a.allocationStatus === 'ALLOCATED' ? 'Allocated' : 'Not Allocated');
-    const holder = a.employeeNameSource || a.currentHolder?.fullName || a.holderDisplayName || '—';
-    const ip = a.lanIp || a.specifications?.ipAddress || '—';
-    const ram = a.ram || a.specifications?.ram || '—';
-    const cpu = a.cpu || a.specifications?.processor || '—';
-    const mac = a.lanMacAddress || a.specifications?.macAddress || '—';
+  const rows = assets.map((a, idx) => {
+    const dept = a.department?.name || a.location || '';
+    const holder = a.employeeNameSource || a.currentHolder?.fullName || a.holderDisplayName || '';
+    const type = a.sourceAssetType || a.assetType || 'Laptop';
+    const make = a.make || a.model || a.assetName || a.manufacturer || '';
+    const serial = a.serialNumber || '';
+    const lanIp = a.lanIp || a.specifications?.ipAddress || '';
+    const wanIp = a.wanIp || '';
+    const assetId = a.companyAssetId || a.assetCode || '';
+    const lanMac = a.lanMacAddress || a.specifications?.macAddress || '';
+    const wanMac = a.wanMacAddress || '';
 
-    const allocDate = a.dateOfAllocation
-      ? new Date(a.dateOfAllocation).toISOString().slice(0, 10)
-      : '—';
-    const deallocDate = a.dateOfDeallocation
-      ? new Date(a.dateOfDeallocation).toISOString().slice(0, 10)
-      : '—';
+    const wStart = a.warrantyStart
+      ? new Date(a.warrantyStart).toISOString().slice(0, 10)
+      : '';
+    const wEnd = a.warrantyEnd
+      ? new Date(a.warrantyEnd).toISOString().slice(0, 10)
+      : '';
 
-    let qualityStr = a.dataQualityStatus || 'CLEAN';
-    if (a.dataQualityIssues) {
-      try {
-        const parsed = typeof a.dataQualityIssues === 'string' ? JSON.parse(a.dataQualityIssues) : a.dataQualityIssues;
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          qualityStr += ` (${parsed.join(', ')})`;
-        }
-      } catch {
-        // use raw string
-      }
+    let wStatus = a.warrantyStatus || '';
+    if (!wStatus && a.warrantyEnd) {
+      wStatus = new Date(a.warrantyEnd) < new Date() ? 'Expired' : 'Active';
     }
 
+    const cpu = a.cpu || a.specifications?.processor || '';
+    const ram = a.ram || a.specifications?.ram || '';
+    const system = a.system || a.specifications?.operatingSystem || '';
+    const software = a.software || '';
+    const msOffice = a.msOffice || '';
+
     return {
-      'Asset ID': a.companyAssetId || a.assetCode || '—',
-      'Asset Name': a.assetName || a.model || '—',
-      'Description': a.assetDescription || a.description || '—',
-      'Serial Number': a.serialNumber || '—',
-      'Asset Type': a.sourceAssetType || a.assetType || '—',
-      'Status': a.sourceAssetStatus || a.status || '—',
-      'Allocation Status': allocStatus,
-      'Employee': holder,
-      'Department / Area': dept,
-      'Location': loc,
-      'Criticality': a.criticality || '—',
-      'LAN IP': ip,
-      'RAM': ram,
-      'Date of Allocation': allocDate,
-      'Date of Deallocation': deallocDate,
+      'Sr. no.': a.srNo !== null && a.srNo !== undefined ? a.srNo : idx + 1,
+      'Department': dept,
+      'User': holder,
+      'Type': type,
+      'Make': make,
+      'Serial No': serial,
+      'LAN IP': lanIp,
+      'WAN IP': wanIp,
+      'Asset ID': assetId,
+      'LAN Mac Address': lanMac,
+      'WAN Mac Address': wanMac,
+      'Warranty Start Date': wStart,
+      'Warranty End Date': wEnd,
       'CPU': cpu,
-      'LAN MAC Address': mac,
-      'Data Quality': qualityStr,
+      'RAM': ram,
+      'System': system,
+      'Warranty Status': wStatus,
+      'Software': software,
+      'MS Office': msOffice,
     };
   });
 
