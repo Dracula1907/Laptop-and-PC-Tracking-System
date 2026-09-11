@@ -54,7 +54,7 @@ echo   PRODUCTION UPDATE SYSTEM
 echo ==================================================
 echo.
 echo Deployment Directory   : %PROJECT_DIR%
-echo Coexisting Project     : Parts Tracking (Protected / Untouched)
+echo Coexisting Project     : Parts Tracking [Protected / Untouched]
 echo.
 
 REM ----------------------------------------------------------
@@ -81,7 +81,7 @@ if %ERRORLEVEL% equ 0 (
 
 if "%DEPLOY_MODE%"=="NONE" (
     where node >nul 2>&1
-    if %ERRORLEVEL% equ 0 (
+    if !ERRORLEVEL! equ 0 (
         where npm >nul 2>&1
         if !ERRORLEVEL! equ 0 (
             set "DEPLOY_MODE=NATIVE"
@@ -98,10 +98,10 @@ if "%DEPLOY_MODE%"=="NONE" (
 
 echo [OK] Git verified.
 if "%DEPLOY_MODE%"=="DOCKER" (
-    echo [OK] Deployment Mode: DOCKER COMPOSE (Project: %COMPOSE_PROJECT_NAME%)
+    echo [OK] Deployment Mode: DOCKER COMPOSE - Project: %COMPOSE_PROJECT_NAME%
     echo Mode: DOCKER >> "%LOG_FILE%"
 ) else (
-    echo [OK] Deployment Mode: NATIVE WINDOWS (Node.js runtime)
+    echo [OK] Deployment Mode: NATIVE WINDOWS - Node.js runtime
     echo Mode: NATIVE >> "%LOG_FILE%"
 )
 echo.
@@ -112,8 +112,7 @@ REM ----------------------------------------------------------
 echo [2/9] Validating project directory and configuration...
 
 if not exist "%PROJECT_DIR%" (
-    echo [ERROR] Project directory does not exist:
-    echo   "%PROJECT_DIR%"
+    echo [ERROR] Project directory does not exist: "%PROJECT_DIR%"
     goto :FAILED
 )
 
@@ -129,9 +128,9 @@ set "ITAM_WEB_PORT=3000"
 if exist "%PROJECT_DIR%\.env" (
     for /f "tokens=1,2 delims==" %%a in ('findstr /i "^ITAM_HTTP_PORT=" "%PROJECT_DIR%\.env"') do set "ITAM_HTTP_PORT=%%b"
     for /f "tokens=1,2 delims==" %%a in ('findstr /i "^ITAM_WEB_PORT=" "%PROJECT_DIR%\.env"') do set "ITAM_WEB_PORT=%%b"
-    echo [OK] Environment file (.env) detected.
+    echo [OK] Environment file .env detected.
 ) else (
-    echo [NOTICE] No local .env found; using default ports (Web: 3000, API: 5000).
+    echo [NOTICE] No local .env found; using default ports Web: 3000, API: 5000.
 )
 
 echo [OK] Logging to: %LOG_FILE%
@@ -154,7 +153,7 @@ for /f "tokens=*" %%c in ('git rev-parse --short HEAD 2^>nul') do set "PREV_COMM
 
 echo Current Branch : %CURRENT_BRANCH%
 echo Current Commit : %PREV_COMMIT%
-echo Branch: %CURRENT_BRANCH% (Commit: %PREV_COMMIT%) >> "%LOG_FILE%"
+echo Branch: %CURRENT_BRANCH% Commit: %PREV_COMMIT% >> "%LOG_FILE%"
 
 REM SAFETY: Verify worktree clean
 set "STATUS_TMP=%TEMP%\itam_git_status_%TIMESTAMP%.tmp"
@@ -184,7 +183,7 @@ echo Fetching origin/%CURRENT_BRANCH%... >> "%LOG_FILE%"
 
 git fetch origin %CURRENT_BRANCH% >> "%LOG_FILE%" 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo [ERROR] Failed to fetch from GitHub remote. Check network / git credentials.
+    echo [ERROR] Failed to fetch from GitHub remote. Check network or credentials.
     echo [ERROR] git fetch failed >> "%LOG_FILE%"
     goto :FAILED
 )
@@ -205,9 +204,9 @@ REM ----------------------------------------------------------
 echo [5/9] Updating source code...
 
 if "%COMMITS_BEHIND%" gtr "0" (
-    echo Pulling %COMMITS_BEHIND% new commit(s) from origin/%CURRENT_BRANCH%...
+    echo Pulling %COMMITS_BEHIND% new commit from origin/%CURRENT_BRANCH%...
     git pull --ff-only origin %CURRENT_BRANCH% >> "%LOG_FILE%" 2>&1
-    if %ERRORLEVEL% neq 0 (
+    if !ERRORLEVEL! neq 0 (
         echo [ERROR] git pull --ff-only failed! Check logs.
         echo [ERROR] git pull failed >> "%LOG_FILE%"
         goto :FAILED
@@ -233,7 +232,7 @@ if "%DEPLOY_MODE%"=="DOCKER" (
         goto :FAILED
     )
 ) else (
-    echo Installing / validating backend dependencies...
+    echo Installing or validating backend dependencies...
     cd /d "%PROJECT_DIR%\backend"
     call npm install >> "%LOG_FILE%" 2>&1
     echo Compiling backend TypeScript...
@@ -244,7 +243,7 @@ if "%DEPLOY_MODE%"=="DOCKER" (
         goto :FAILED
     )
 
-    echo Installing / validating frontend dependencies...
+    echo Installing or validating frontend dependencies...
     cd /d "%PROJECT_DIR%\frontend"
     call npm install >> "%LOG_FILE%" 2>&1
     echo Building frontend production bundle...
@@ -294,14 +293,14 @@ if "%DEPLOY_MODE%"=="DOCKER" (
         echo Database backup: !BACKUP_FILE! >> "%LOG_FILE%"
     )
 
-    echo Applying Prisma migrations (including 19-column schema upgrade)...
+    echo Applying Prisma migrations - including 19-column schema upgrade...
     docker compose -p %COMPOSE_PROJECT_NAME% run --rm --no-deps backend npx prisma migrate deploy >> "%LOG_FILE%" 2>&1
     if !ERRORLEVEL! neq 0 (
         echo [ERROR] Database migration failed!
         goto :FAILED
     )
 
-    echo Synchronizing official 19-column registry (data/ASSET LIST.xls)...
+    echo Synchronizing official 19-column registry with data/ASSET LIST.xls...
     docker compose -p %COMPOSE_PROJECT_NAME% run --rm --no-deps backend node scripts/run_official_import.js >> "%LOG_FILE%" 2>&1
     if !ERRORLEVEL! equ 0 (
         echo [OK] Official Asset Inventory synchronized successfully.
@@ -313,7 +312,7 @@ if "%DEPLOY_MODE%"=="DOCKER" (
     cd /d "%PROJECT_DIR%\backend"
     node scripts/backup_db.js >> "%LOG_FILE%" 2>&1
 
-    echo Applying Prisma migrations (npx prisma migrate deploy)...
+    echo Applying Prisma migrations with prisma migrate deploy...
     call npx prisma migrate deploy >> "%LOG_FILE%" 2>&1
     if !ERRORLEVEL! neq 0 (
         echo [ERROR] Native database migration failed! Check %LOG_FILE%
@@ -321,7 +320,7 @@ if "%DEPLOY_MODE%"=="DOCKER" (
         goto :FAILED
     )
 
-    echo Synchronizing official 19-column registry (data/ASSET LIST.xls)...
+    echo Synchronizing official 19-column registry with data/ASSET LIST.xls...
     node scripts/run_official_import.js >> "%LOG_FILE%" 2>&1
     if !ERRORLEVEL! equ 0 (
         echo [OK] Official Asset Inventory synchronized successfully.
@@ -385,9 +384,9 @@ echo ==================================================
 echo.
 echo   Active Commit   : %NEW_COMMIT%
 echo   Deployment Mode : %DEPLOY_MODE%
-echo   Web Application : http://localhost:3000 (or http://localhost:%ITAM_HTTP_PORT%)
+echo   Web Application : http://localhost:3000 or http://localhost:%ITAM_HTTP_PORT%
 echo   Backend Health  : http://localhost:5000/api/health
-echo   Official File   : data/ASSET LIST.xls (19 Columns Synchronized)
+echo   Official File   : data/ASSET LIST.xls - 19 Columns Synchronized
 echo   Deployment Log  : %LOG_FILE%
 echo.
 if "%DEPLOY_MODE%"=="DOCKER" (
