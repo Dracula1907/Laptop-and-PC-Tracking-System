@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'MANAGER' | 'IT' | 'USER';
+export type UserRole = 'ADMIN' | 'DIRECTOR' | 'MANAGER' | 'SECURITY_GUARD' | 'IT' | 'USER';
 
 export type AssetType =
   | 'LAPTOP'
@@ -533,6 +533,10 @@ export interface MaintenanceRecord {
   serviceCost?: number;
   otherCost?: number;
   repairCost?: number;
+  estimatedCost?: number;
+  approvalStatus?: string;
+  rejectionReason?: string;
+  approvalRequestId?: string;
   underWarranty: boolean;
   warrantyProvider?: string;
   warrantyReference?: string;
@@ -706,6 +710,7 @@ export type ApprovalRequestType =
   | 'ASSIGNMENT'
   | 'TRANSFER'
   | 'RETURN_DISPOSITION'
+  | 'MAINTENANCE'
   | 'MAINTENANCE_COMPLETION'
   | 'ASSET_STATUS_CHANGE'
   | 'ASSET_DEACTIVATION'
@@ -1508,3 +1513,40 @@ export interface SiteLaptopStats {
   maintenance: number;
   uniqueLaptops: number;
 }
+
+export interface OutsideLaptopRecord {
+  id: string;
+  recordCode: string;
+  laptopName: string;
+  laptopIdentifier: string;
+  personName: string;
+  personDetails?: string | null;
+  company?: string | null;
+  contactNumber?: string | null;
+  movementType: 'OUT' | 'IN';
+  purpose: string;
+  destination?: string | null;
+  movementDateTime: string;
+  recordedById?: string | null;
+  recordedBy?: {
+    id: string;
+    username: string;
+    employee?: {
+      fullName: string;
+    } | null;
+  } | null;
+  status: 'OUTSIDE' | 'RETURNED';
+  linkedOutRecordId?: string | null;
+  remarks?: string | null;
+  isDeleted: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OutsideLaptopStats {
+  totalMovements: number;
+  currentlyOutside: number;
+  totalReturned: number;
+  todayMovements: number;
+}
+

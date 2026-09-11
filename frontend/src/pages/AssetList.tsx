@@ -93,7 +93,6 @@ export const AssetList: React.FC = () => {
   const [search, setSearch] = useState<string>(searchParams.get('search') || '');
   const [assetType, setAssetType] = useState<string>(searchParams.get('assetType') || '');
   const [department, setDepartment] = useState<string>(searchParams.get('department') || '');
-  const [location, setLocation] = useState<string>(searchParams.get('location') || '');
   const [sourceAssetStatus, setSourceAssetStatus] = useState<string>(searchParams.get('sourceAssetStatus') || '');
   const [allocationStatus, setAllocationStatus] = useState<string>(searchParams.get('allocationStatus') || '');
   const [criticality, setCriticality] = useState<string>(searchParams.get('criticality') || '');
@@ -105,7 +104,6 @@ export const AssetList: React.FC = () => {
 
   // Dynamic Options from DB
   const [departments, setDepartments] = useState<string[]>([]);
-  const [locations, setLocations] = useState<string[]>([]);
 
   // Multi-Row Selection state
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
@@ -166,26 +164,13 @@ export const AssetList: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch dynamic departments and locations from PostgreSQL
+  // Fetch dynamic departments from PostgreSQL
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const [deptRes, locRes]: any = await Promise.allSettled([
-          api.get('/assets/departments'),
-          api.get('/assets/locations'),
-        ]);
-
-        if (deptRes.status === 'fulfilled') {
-          const res = deptRes.value;
-          const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-          setDepartments(items);
-        }
-
-        if (locRes.status === 'fulfilled') {
-          const res = locRes.value;
-          const items = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-          setLocations(items);
-        }
+        const deptRes: any = await api.get('/assets/departments');
+        const items = Array.isArray(deptRes) ? deptRes : Array.isArray(deptRes?.data) ? deptRes.data : [];
+        setDepartments(items);
       } catch (err) {
         console.error('Failed to load filter options:', err);
       }
@@ -230,7 +215,6 @@ export const AssetList: React.FC = () => {
       if (search.trim()) query.set('search', search.trim());
       if (assetType) query.set('assetType', assetType);
       if (department) query.set('department', department);
-      if (location) query.set('location', location);
       if (sourceAssetStatus) query.set('sourceAssetStatus', sourceAssetStatus);
       if (allocationStatus) query.set('allocationStatus', allocationStatus);
       if (criticality) query.set('criticality', criticality);
@@ -242,7 +226,6 @@ export const AssetList: React.FC = () => {
         search,
         assetType,
         department,
-        location,
         sourceAssetStatus,
         allocationStatus,
         criticality,
@@ -279,7 +262,7 @@ export const AssetList: React.FC = () => {
   useEffect(() => {
     fetchAssets(1, pagination.limit);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, assetType, department, location, sourceAssetStatus, allocationStatus, criticality, dataQualityStatus, sortBy, sortOrder]);
+  }, [search, assetType, department, sourceAssetStatus, allocationStatus, criticality, dataQualityStatus, sortBy, sortOrder]);
 
   const handlePageChange = (newPage: number) => {
     fetchAssets(newPage, pagination.limit);
@@ -304,7 +287,6 @@ export const AssetList: React.FC = () => {
     setSearch('');
     setAssetType('');
     setDepartment('');
-    setLocation('');
     setSourceAssetStatus('');
     setAllocationStatus('');
     setCriticality('');
@@ -317,13 +299,12 @@ export const AssetList: React.FC = () => {
     if (search.trim()) count++;
     if (assetType) count++;
     if (department) count++;
-    if (location) count++;
     if (sourceAssetStatus) count++;
     if (allocationStatus) count++;
     if (criticality) count++;
     if (dataQualityStatus) count++;
     return count;
-  }, [search, assetType, department, location, sourceAssetStatus, allocationStatus, criticality, dataQualityStatus]);
+  }, [search, assetType, department, sourceAssetStatus, allocationStatus, criticality, dataQualityStatus]);
 
   // Multi-row selection handlers
   const allOnPageSelected = useMemo(() => {
@@ -356,7 +337,6 @@ export const AssetList: React.FC = () => {
       if (search.trim()) query.set('search', search.trim());
       if (assetType) query.set('assetType', assetType);
       if (department) query.set('department', department);
-      if (location) query.set('location', location);
       if (sourceAssetStatus) query.set('sourceAssetStatus', sourceAssetStatus);
       if (allocationStatus) query.set('allocationStatus', allocationStatus);
       if (criticality) query.set('criticality', criticality);
@@ -987,7 +967,7 @@ export const AssetList: React.FC = () => {
 
       {/* Filter & Search Toolbar */}
       <div className="bg-bgElevated border border-borderBase rounded-xl p-4 space-y-3 shadow-card">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-2.5 items-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-2.5 items-center">
           {/* Search Input (2 cols) */}
           <div className="lg:col-span-2">
             <SearchInput
@@ -1004,16 +984,6 @@ export const AssetList: React.FC = () => {
             options={[
               { value: '', label: 'All Departments' },
               ...departments.map((d) => ({ value: d, label: d })),
-            ]}
-          />
-
-          {/* Location Filter */}
-          <Select
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            options={[
-              { value: '', label: 'All Locations' },
-              ...locations.map((loc) => ({ value: loc, label: loc })),
             ]}
           />
 
@@ -1138,15 +1108,6 @@ export const AssetList: React.FC = () => {
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-950/50 border border-blue-500/30 text-blue-300 text-[11px]">
                 Dept: {department}
                 <button type="button" onClick={() => setDepartment('')} className="hover:text-white">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-
-            {location && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-950/50 border border-indigo-500/30 text-indigo-300 text-[11px]">
-                Location: {location}
-                <button type="button" onClick={() => setLocation('')} className="hover:text-white">
                   <X className="w-3 h-3" />
                 </button>
               </span>

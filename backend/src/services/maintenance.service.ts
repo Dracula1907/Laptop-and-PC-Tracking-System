@@ -1,5 +1,15 @@
 import prisma from '../config/prisma';
-import { MaintenanceStatus, AssetStatus, AssetAction, AssetCondition, WorkflowStatus } from '@prisma/client';
+import {
+  MaintenanceStatus,
+  AssetStatus,
+  AssetAction,
+  AssetCondition,
+  WorkflowStatus,
+  ApprovalRequestType,
+  ApprovalStatus,
+  ApprovalPriority,
+} from '@prisma/client';
+import { ApprovalService } from './approval.service';
 import {
   MaintenanceCreateSchema,
   MaintenanceUpdateSchema,
@@ -280,6 +290,10 @@ export class MaintenanceService {
         serviceCost: r.serviceCost || 0,
         otherCost: r.otherCost || 0,
         repairCost: r.repairCost || 0,
+        estimatedCost: r.estimatedCost || r.repairCost || 0,
+        approvalStatus: r.approvalStatus || 'PENDING',
+        rejectionReason: r.rejectionReason || null,
+        approvalRequestId: r.approvalRequestId || null,
         underWarranty: r.underWarranty,
         warrantyProvider: r.warrantyProvider || '—',
         warrantyReference: r.warrantyReference || '—',
@@ -455,16 +469,18 @@ export class MaintenanceService {
       );
     }
 
-    // Safe cost calculation: total = labor + parts + service + other
+    // Safe cost calculation: total = labor + parts + service + other + estimated
     const laborCost = Number(validated.laborCost) || 0;
     const partsCost = Number(validated.partsCost) || 0;
     const serviceCost = Number(validated.serviceCost) || 0;
     const otherCost = Number(validated.otherCost) || 0;
-    const totalCost = laborCost + partsCost + serviceCost + otherCost || Number(validated.repairCost) || 0;
+    const rawCost = (data as any)?.estimatedCost !== undefined ? Number((data as any).estimatedCost) : undefined;
+    const totalCost = laborCost + partsCost + serviceCost + otherCost || (rawCost !== undefined ? rawCost : Number(validated.repairCost) || 0);
 
     return await prisma.$transaction(async (tx) => {
       const code = await MaintenanceService.generateMaintenanceCode(tx);
 
+      // 1. Create Maintenance Record with PENDING approval status
       const maintenance = await tx.maintenanceRecord.create({
         data: {
           maintenanceCode: code,
@@ -476,7 +492,7 @@ export class MaintenanceService {
           priority: validated.priority || 'MEDIUM',
           technician: validated.technician,
           technicianId: validated.technicianId || null,
-          serviceProvider: validated.serviceProvider || 'Internal IT',
+          serviceProvider: validated.serviceProvider || 'Internal IT Helpdesk',
           assignedToId: validated.assignedToId || null,
           reportedAt: validated.reportedAt || new Date(),
           repairStartDate: validated.repairStartDate || null,
@@ -493,20 +509,99 @@ export class MaintenanceService {
           serviceCost,
           otherCost,
           repairCost: totalCost,
-          repairStatus: validated.repairStatus || MaintenanceStatus.OPEN,
+          estimatedCost: totalCost,
+          approvalStatus: 'PENDING',
+          repairStatus: MaintenanceStatus.OPEN,
           departmentId: asset.departmentId || null,
           locationId: asset.locationId || null,
           remarks: validated.remarks || null,
         },
       });
 
-      // Update asset status to UNDER_REPAIR (Preserves holder accountability)
+      // 2. Fetch Requester info for descriptive approval summary
+      const requester = await tx.user.findUnique({
+        where: { id: userId },
+        include: { employee: true },
+      });
+      const requesterName = requester?.employee?.fullName || requester?.username || 'Manager';
+      const departmentName = asset.department?.name || 'IT';
+
+      // 3. Create ApprovalRequest targeted to DIRECTOR
+      const appReqCode = await ApprovalService.generateRequestCode();
+      const approvalPriority =
+        validated.priority === 'CRITICAL'
+          ? ApprovalPriority.URGENT
+          : validated.priority === 'HIGH'
+          ? ApprovalPriority.HIGH
+          : ApprovalPriority.MEDIUM;
+
+      const proposedChangesPayload = {
+        maintenanceRecordId: maintenance.id,
+        maintenanceCode: code,
+        assetId: asset.id,
+        assetCode: asset.companyAssetId || asset.assetCode,
+        assetName: asset.assetName || asset.model || asset.manufacturer,
+        serialNumber: asset.serialNumber || '—',
+        maintenanceType: validated.maintenanceType || 'CORRECTIVE',
+        issueTitle: validated.issueTitle,
+        issueDescription: validated.issueDescription,
+        proposedCost: totalCost,
+        estimatedCost: totalCost,
+        vendor: validated.serviceProvider || 'Internal IT Helpdesk',
+        technician: validated.technician || '—',
+        requestedBy: requesterName,
+        department: departmentName,
+        requestedAt: new Date().toISOString(),
+      };
+
+      const appReq = await tx.approvalRequest.create({
+        data: {
+          requestCode: appReqCode,
+          requestType: ApprovalRequestType.MAINTENANCE,
+          relatedEntityType: 'MaintenanceRecord',
+          relatedEntityId: maintenance.id,
+          assetId: asset.id,
+          requestedById: userId,
+          requestedAt: new Date(),
+          status: ApprovalStatus.PENDING,
+          priority: approvalPriority,
+          targetRole: 'DIRECTOR',
+          reason: `Maintenance Request for ${asset.companyAssetId || asset.assetCode}: ${validated.issueTitle}`,
+          comments: validated.issueDescription,
+          proposedChanges: JSON.stringify(proposedChangesPayload),
+          expectedSourceState: JSON.stringify({
+            status: AssetStatus.UNDER_REPAIR,
+            holderId: asset.currentHolderId,
+          }),
+          version: 1,
+        },
+      });
+
+      // 4. Link approvalRequestId to MaintenanceRecord
+      await tx.maintenanceRecord.update({
+        where: { id: maintenance.id },
+        data: { approvalRequestId: appReq.id },
+      });
+
+      // 5. Initial Approval History entry
+      await tx.approvalHistory.create({
+        data: {
+          approvalRequestId: appReq.id,
+          step: 1,
+          action: 'SUBMITTED',
+          performedById: userId,
+          comment: `Maintenance ticket logged with proposed cost INR ${totalCost.toLocaleString()}. Awaiting Director approval.`,
+          snapshot: JSON.stringify(proposedChangesPayload),
+        },
+      });
+
+      // 6. Update asset status to UNDER_REPAIR (Preserves holder accountability)
       await tx.asset.update({
         where: { id: validated.assetId },
         data: { status: AssetStatus.UNDER_REPAIR },
       });
 
-      // Immutable history log
+      // 7. Immutable history log
       await tx.assetStatusHistory.create({
         data: {
           assetId: validated.assetId,
@@ -514,11 +609,11 @@ export class MaintenanceService {
           previousStatus: asset.status,
           newStatus: AssetStatus.UNDER_REPAIR,
           performedById: userId,
-          remarks: `[${code}] Maintenance logged: ${validated.issueTitle} (${validated.priority} priority)`,
+          remarks: `[${code}] Maintenance logged: ${validated.issueTitle} (Proposed Cost: INR ${totalCost.toLocaleString()}, Awaiting Director Approval)`,
         },
       });
 
-      // Audit log
+      // 8. Audit log
       await tx.auditLog.create({
         data: {
           userId,
@@ -529,12 +624,43 @@ export class MaintenanceService {
             code,
             issueTitle: validated.issueTitle,
             assetCode: asset.companyAssetId,
-            priority: validated.priority,
+            proposedCost: totalCost,
+            approvalRequestId: appReq.id,
           }),
         },
       });
 
-      return maintenance;
+      // 9. Notify Director (and Admin) of pending maintenance approval
+      const targetUsers = await tx.user.findMany({
+        where: {
+          isActive: true,
+          id: { not: userId },
+          role: { code: { in: ['DIRECTOR', 'ADMIN'] } },
+        },
+        select: { id: true },
+      });
+
+      for (const u of targetUsers) {
+        await tx.notification.create({
+          data: {
+            userId: u.id,
+            category: 'APPROVAL',
+            type: 'NEW_APPROVAL_REQUEST',
+            priority: validated.priority === 'CRITICAL' ? 'CRITICAL' : 'HIGH',
+            title: 'Maintenance Approval Required',
+            message: `Asset: ${asset.companyAssetId || asset.assetCode} | Proposed Cost: INR ${totalCost.toLocaleString()} | Requested by: ${requesterName}`,
+            entityType: 'ApprovalRequest',
+            entityId: appReq.id,
+            assetId: asset.id,
+            actionRoute: '/approvals',
+          },
+        });
+      }
+
+      return {
+        ...maintenance,
+        approvalRequestId: appReq.id,
+      };
     });
   }
 
@@ -545,6 +671,12 @@ export class MaintenanceService {
     const validated = MaintenanceAssignSchema.parse(data);
     const existing = await prisma.maintenanceRecord.findUnique({ where: { id }, include: { asset: true } });
     if (!existing) throw new Error('Maintenance record not found');
+
+    if (existing.approvalStatus && existing.approvalStatus !== 'APPROVED') {
+      throw new Error(
+        `Cannot proceed: Maintenance ticket (${existing.maintenanceCode || existing.id}) is currently ${existing.approvalStatus}. Director approval is required before technician assignment.`
+      );
+    }
 
     const nextStatus =
       existing.repairStatus === MaintenanceStatus.OPEN || existing.repairStatus === MaintenanceStatus.REPORTED
@@ -588,6 +720,12 @@ export class MaintenanceService {
     const existing = await prisma.maintenanceRecord.findUnique({ where: { id } });
     if (!existing) throw new Error('Maintenance record not found');
 
+    if (existing.approvalStatus && existing.approvalStatus !== 'APPROVED') {
+      throw new Error(
+        `Cannot proceed: Maintenance ticket (${existing.maintenanceCode || existing.id}) is currently ${existing.approvalStatus}. Director approval is required before diagnostic execution.`
+      );
+    }
+
     const nextStatus =
       existing.repairStatus === MaintenanceStatus.OPEN || existing.repairStatus === MaintenanceStatus.ASSIGNED
         ? MaintenanceStatus.IN_PROGRESS
@@ -626,6 +764,12 @@ export class MaintenanceService {
     const validated = MaintenanceRepairSchema.parse(data);
     const existing = await prisma.maintenanceRecord.findUnique({ where: { id } });
     if (!existing) throw new Error('Maintenance record not found');
+
+    if (existing.approvalStatus && existing.approvalStatus !== 'APPROVED') {
+      throw new Error(
+        `Cannot proceed: Maintenance ticket (${existing.maintenanceCode || existing.id}) is currently ${existing.approvalStatus}. Director approval is required before recording repairs.`
+      );
+    }
 
     const laborCost = Number(validated.laborCost ?? existing.laborCost ?? 0);
     const partsCost = Number(validated.partsCost ?? existing.partsCost ?? 0);
@@ -686,6 +830,12 @@ export class MaintenanceService {
       include: { asset: true },
     });
     if (!existing) throw new Error('Maintenance record not found');
+
+    if (existing.approvalStatus && existing.approvalStatus !== 'APPROVED') {
+      throw new Error(
+        `Cannot proceed: Maintenance ticket (${existing.maintenanceCode || existing.id}) is currently ${existing.approvalStatus}. Director approval is required before completing maintenance.`
+      );
+    }
 
     const laborCost = Number(validated.laborCost ?? existing.laborCost ?? 0);
     const partsCost = Number(validated.partsCost ?? existing.partsCost ?? 0);
@@ -836,6 +986,79 @@ export class MaintenanceService {
     return await prisma.$transaction(async (tx) => {
       const { parts, ...recData } = validated;
 
+      let nextApprovalStatus = existing.approvalStatus;
+      let nextApprovalRequestId = existing.approvalRequestId;
+
+      // Handle Material Cost Changes
+      const costChanged = totalCost !== (existing.repairCost || existing.estimatedCost || 0);
+      if (costChanged) {
+        if (existing.approvalStatus === 'PENDING' && existing.approvalRequestId) {
+          // Update pending approval request with revised cost
+          const appReq = await tx.approvalRequest.findUnique({ where: { id: existing.approvalRequestId } });
+          if (appReq) {
+            let pChanges: any = {};
+            try { pChanges = JSON.parse(appReq.proposedChanges); } catch { pChanges = {}; }
+            pChanges.proposedCost = totalCost;
+            pChanges.estimatedCost = totalCost;
+            await tx.approvalRequest.update({
+              where: { id: appReq.id },
+              data: { proposedChanges: JSON.stringify(pChanges) },
+            });
+            await tx.approvalHistory.create({
+              data: {
+                approvalRequestId: appReq.id,
+                step: appReq.currentStep,
+                action: 'RESUBMITTED',
+                performedById: userId,
+                comment: `Maintenance cost revised to INR ${totalCost.toLocaleString()}. Director review updated.`,
+                snapshot: JSON.stringify(pChanges),
+              },
+            });
+          }
+        } else if (existing.approvalStatus === 'APPROVED') {
+          // Rule: Material cost change after approval requires fresh Director approval!
+          const appReqCode = await ApprovalService.generateRequestCode();
+          const newAppReq = await tx.approvalRequest.create({
+            data: {
+              requestCode: appReqCode,
+              requestType: ApprovalRequestType.MAINTENANCE,
+              relatedEntityType: 'MaintenanceRecord',
+              relatedEntityId: existing.id,
+              assetId: existing.assetId,
+              requestedById: userId,
+              status: ApprovalStatus.PENDING,
+              targetRole: 'DIRECTOR',
+              reason: `Cost Revision for ${existing.maintenanceCode}: ${validated.issueTitle || existing.issueTitle}`,
+              comments: `Cost modified from INR ${(existing.repairCost || 0).toLocaleString()} to INR ${totalCost.toLocaleString()}. Director re-approval required.`,
+              proposedChanges: JSON.stringify({
+                maintenanceRecordId: existing.id,
+                maintenanceCode: existing.maintenanceCode,
+                assetId: existing.assetId,
+                assetCode: existing.asset.companyAssetId || existing.asset.assetCode,
+                proposedCost: totalCost,
+                estimatedCost: totalCost,
+                previousCost: existing.repairCost,
+                issueTitle: validated.issueTitle || existing.issueTitle,
+                requestedAt: new Date().toISOString(),
+              }),
+            },
+          });
+
+          await tx.approvalHistory.create({
+            data: {
+              approvalRequestId: newAppReq.id,
+              step: 1,
+              action: 'SUBMITTED',
+              performedById: userId,
+              comment: `Maintenance cost altered post-approval (INR ${totalCost.toLocaleString()}). Resubmitted for Director approval.`,
+            },
+          });
+
+          nextApprovalStatus = 'PENDING';
+          nextApprovalRequestId = newAppReq.id;
+        }
+      }
+
       const updated = await tx.maintenanceRecord.update({
         where: { id },
         data: {
@@ -845,6 +1068,9 @@ export class MaintenanceService {
           serviceCost,
           otherCost,
           repairCost: totalCost,
+          estimatedCost: totalCost,
+          approvalStatus: nextApprovalStatus,
+          approvalRequestId: nextApprovalRequestId,
         },
       });
 

@@ -1052,7 +1052,7 @@ export class AssetService {
         performedById: userId,
         eventDate: new Date(),
         reason: validated.issueTitle,
-        remarks: `${validated.issueDescription || ''} (Technician: ${validated.technician || 'N/A'}, Cost: ₹${validated.repairCost || 0})`,
+        remarks: `${validated.issueDescription || ''} (Technician: ${validated.technician || 'N/A'}, Cost: INR ${validated.repairCost || 0})`,
       });
 
       await tx.auditLog.create({

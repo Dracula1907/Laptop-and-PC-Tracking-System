@@ -5,23 +5,24 @@ export class GateMasterService {
    * Ensures default physical gates exist in the system.
    */
   public static async ensureDefaultGates() {
-    const defaultGates = [
-      { code: 'GATE-01', name: 'Main Security Gate', location: 'Building A Main Entrance' },
-      { code: 'GATE-02', name: 'Dispatch & Logistics Gate', location: 'Loading Bay 1' },
-      { code: 'GATE-03', name: 'R&D Lab Security Gate', location: 'Technology Wing' },
-      { code: 'GATE-04', name: 'Service & Maintenance Gate', location: 'Plant Workshop' },
-    ];
+    // Only GATE-01 (Main Security Gate) is ACTIVE for all new gate operations
+    await prisma.gate.upsert({
+      where: { code: 'GATE-01' },
+      update: { status: 'ACTIVE' },
+      create: {
+        code: 'GATE-01',
+        name: 'Main Security Gate',
+        location: 'Building A Main Entrance',
+        status: 'ACTIVE',
+      },
+    }).catch(() => {});
 
-    for (const g of defaultGates) {
-      await prisma.gate.upsert({
-        where: { code: g.code },
-        update: {},
-        create: {
-          code: g.code,
-          name: g.name,
-          location: g.location,
-          status: 'ACTIVE',
-        },
+    // Deactivate GATE-02, GATE-03, GATE-04 so historical movement foreign keys are preserved
+    const inactiveGates = ['GATE-02', 'GATE-03', 'GATE-04'];
+    for (const code of inactiveGates) {
+      await prisma.gate.updateMany({
+        where: { code },
+        data: { status: 'INACTIVE' },
       }).catch(() => {});
     }
   }
@@ -29,6 +30,7 @@ export class GateMasterService {
   public static async getGates() {
     await this.ensureDefaultGates();
     return await prisma.gate.findMany({
+      where: { status: 'ACTIVE' },
       orderBy: { code: 'asc' },
       include: {
         _count: {

@@ -164,6 +164,7 @@ export const Maintenance: React.FC = () => {
     warrantyReference: '',
     warrantyClaimNumber: '',
     conditionBefore: 'GOOD',
+    estimatedCost: '' as string | number,
     laborCost: 0,
     partsCost: 0,
     serviceCost: 0,
@@ -402,6 +403,7 @@ export const Maintenance: React.FC = () => {
       warrantyReference: '',
       warrantyClaimNumber: '',
       conditionBefore: firstAsset?.condition || 'GOOD',
+      estimatedCost: '',
       laborCost: 0,
       partsCost: 0,
       serviceCost: 0,
@@ -455,10 +457,12 @@ export const Maintenance: React.FC = () => {
         warrantyReference: createForm.warrantyReference || null,
         warrantyClaimNumber: createForm.warrantyClaimNumber || null,
         conditionBefore: createForm.conditionBefore,
+        estimatedCost: Number(createForm.estimatedCost) || 0,
         laborCost: Number(createForm.laborCost) || 0,
         partsCost: Number(createForm.partsCost) || 0,
         serviceCost: Number(createForm.serviceCost) || 0,
         otherCost: Number(createForm.otherCost) || 0,
+        repairCost: Number(createForm.estimatedCost) || 0,
         repairStatus: createForm.repairStatus,
         remarks: createForm.remarks || null,
         expectedSourceState: {
@@ -1268,16 +1272,48 @@ export const Maintenance: React.FC = () => {
                         </span>
                       </td>
 
-                      {/* Status */}
+                      {/* Status & Director Approval */}
                       <td className="px-3.5 py-3 whitespace-nowrap">
-                        {isComp ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/40 text-emerald-400 border border-emerald-500/20">
-                            COMPLETED
-                          </span>
+                        {item.approvalStatus === 'PENDING' ? (
+                          <div className="space-y-1">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950/60 text-amber-300 border border-amber-500/40 inline-flex items-center gap-1 shadow-sm">
+                              <Clock className="w-3 h-3 text-amber-400" />
+                              PENDING — Awaiting Director Approval
+                            </span>
+                            <span className="block text-[10px] text-textSecondary font-mono">
+                              Status: {item.repairStatus}
+                            </span>
+                          </div>
+                        ) : item.approvalStatus === 'REJECTED' ? (
+                          <div className="space-y-1">
+                            <span
+                              title={item.rejectionReason ? `Rejection Reason: ${item.rejectionReason}` : 'Rejected by Director'}
+                              className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-950/60 text-rose-300 border border-rose-500/40 inline-flex items-center gap-1 cursor-help"
+                            >
+                              <X className="w-3 h-3 text-rose-400" />
+                              REJECTED — Rejected by Director
+                            </span>
+                            {item.rejectionReason && (
+                              <span className="block text-[10px] text-rose-300/80 italic truncate max-w-[170px]" title={item.rejectionReason}>
+                                "{item.rejectionReason}"
+                              </span>
+                            )}
+                          </div>
+                        ) : isComp ? (
+                          <div className="space-y-0.5">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-950/40 text-emerald-400 border border-emerald-500/20">
+                              COMPLETED
+                            </span>
+                            {item.approvalStatus === 'APPROVED' && (
+                              <span className="block text-[9px] text-emerald-400/80 font-mono font-semibold">
+                                ✓ Approved by Director
+                              </span>
+                            )}
+                          </div>
                         ) : isOpen ? (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950/40 text-amber-400 border border-amber-500/30 inline-flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            OPEN
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950/40 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" />
+                            APPROVED — Approved by Director
                           </span>
                         ) : isAssigned ? (
                           <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-950/40 text-purple-400 border border-purple-500/30 inline-flex items-center gap-1">
@@ -1363,76 +1399,81 @@ export const Maintenance: React.FC = () => {
 
                       {/* Actions */}
                       <td className="px-3.5 py-3 whitespace-nowrap text-right font-sans" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenDetailModal(item)}
-                            title="View Maintenance Audit Breakdown"
-                            className="p-1.5 hover:text-brandPrimary hover:bg-slate-800"
-                            icon={<Eye className="w-4 h-4" />}
-                          />
-                          {(isOpen || isAssigned) && hasPermission('MAINTENANCE_UPDATE') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenAssignModal(item)}
-                              title="Assign Technician / Service Provider"
-                              className="p-1.5 text-purple-400 hover:bg-purple-950/40"
-                              icon={<UserCheck className="w-4 h-4" />}
-                            />
-                          )}
-                          {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenDiagnoseModal(item)}
-                              title="Update Technical Diagnosis & Root Cause"
-                              className="p-1.5 text-cyan-400 hover:bg-cyan-950/40"
-                              icon={<Activity className="w-4 h-4" />}
-                            />
-                          )}
-                          {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenRepairModal(item)}
-                              title="Record Repair Actions, Replaced Parts & Costs"
-                              className="p-1.5 text-orange-400 hover:bg-orange-950/40"
-                              icon={<Cpu className="w-4 h-4" />}
-                            />
-                          )}
-                          {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenCompleteModal(item)}
-                              title="Complete Maintenance & Synchronize Asset Stock"
-                              className="p-1.5 text-emerald-400 hover:bg-emerald-950/40"
-                              icon={<CheckCircle2 className="w-4 h-4" />}
-                            />
-                          )}
-                          {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenEditModal(item)}
-                              title="Edit Ticket Parameters"
-                              className="p-1.5 hover:text-amber-400 hover:bg-slate-800"
-                              icon={<Edit className="w-4 h-4" />}
-                            />
-                          )}
-                          {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleOpenCancelModal(item)}
-                              title="Cancel Ticket with Rationale"
-                              className="p-1.5 hover:text-rose-400 hover:bg-rose-950/40"
-                              icon={<Ban className="w-4 h-4" />}
-                            />
-                          )}
-                        </div>
+                        {(() => {
+                          const isApproved = item.approvalStatus === 'APPROVED' || !item.approvalStatus;
+                          return (
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenDetailModal(item)}
+                                title="View Maintenance Audit Breakdown"
+                                className="p-1.5 hover:text-brandPrimary hover:bg-slate-800"
+                                icon={<Eye className="w-4 h-4" />}
+                              />
+                              {(isOpen || isAssigned) && hasPermission('MAINTENANCE_UPDATE') && isApproved && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenAssignModal(item)}
+                                  title="Assign Technician / Service Provider"
+                                  className="p-1.5 text-purple-400 hover:bg-purple-950/40"
+                                  icon={<UserCheck className="w-4 h-4" />}
+                                />
+                              )}
+                              {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && isApproved && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenDiagnoseModal(item)}
+                                  title="Update Technical Diagnosis & Root Cause"
+                                  className="p-1.5 text-cyan-400 hover:bg-cyan-950/40"
+                                  icon={<Activity className="w-4 h-4" />}
+                                />
+                              )}
+                              {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && isApproved && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenRepairModal(item)}
+                                  title="Record Repair Actions, Replaced Parts & Costs"
+                                  className="p-1.5 text-orange-400 hover:bg-orange-950/40"
+                                  icon={<Cpu className="w-4 h-4" />}
+                                />
+                              )}
+                              {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && isApproved && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenCompleteModal(item)}
+                                  title="Complete Maintenance & Synchronize Asset Stock"
+                                  className="p-1.5 text-emerald-400 hover:bg-emerald-950/40"
+                                  icon={<CheckCircle2 className="w-4 h-4" />}
+                                />
+                              )}
+                              {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenEditModal(item)}
+                                  title="Edit Ticket Parameters"
+                                  className="p-1.5 hover:text-amber-400 hover:bg-slate-800"
+                                  icon={<Edit className="w-4 h-4" />}
+                                />
+                              )}
+                              {!isComp && !isCanc && hasPermission('MAINTENANCE_UPDATE') && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleOpenCancelModal(item)}
+                                  title="Cancel Ticket with Rationale"
+                                  className="p-1.5 text-rose-400 hover:bg-rose-950/40"
+                                  icon={<Ban className="w-4 h-4" />}
+                                />
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -1594,6 +1635,35 @@ export const Maintenance: React.FC = () => {
                 placeholder="Describe failure symptoms, diagnostic observations, error messages..."
                 className="w-full bg-bgBase border border-borderBase rounded-lg px-3 py-2 text-textPrimary placeholder-textSecondary focus:outline-none focus:border-brandPrimary"
               />
+            </div>
+
+            {/* Step 3.5: Prominent Estimated Maintenance Cost Field */}
+            <div className="p-3.5 rounded-xl bg-[#141A28] border border-emerald-500/30 space-y-1.5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <label className="block text-emerald-300 font-semibold text-xs flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  Estimated Maintenance Cost (₹) <span className="text-rose-400">*</span>
+                </label>
+                <span className="text-[10px] text-amber-300 font-mono bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
+                  Requires Director Approval
+                </span>
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-2 text-emerald-400 font-bold font-mono text-sm">₹</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={createForm.estimatedCost}
+                  onChange={(e) => setCreateForm({ ...createForm, estimatedCost: e.target.value })}
+                  placeholder="Enter estimated repair / servicing cost (e.g. 15000)"
+                  className="w-full bg-bgBase border border-borderBase rounded-lg pl-8 pr-3 py-2 text-textPrimary placeholder-textSecondary focus:outline-none focus:border-emerald-500 font-mono font-bold text-sm"
+                  required
+                />
+              </div>
+              <p className="text-[11px] text-slate-400">
+                This maintenance request will be routed directly to the <strong>Director</strong> for cost review and approval. Servicing cannot begin until approved.
+              </p>
             </div>
 
             {/* Step 4: Technician / Service Provider */}
@@ -2188,6 +2258,51 @@ export const Maintenance: React.FC = () => {
                 <span className="text-[10px] text-textSecondary uppercase font-mono block">Ticket ID</span>
                 <span className="text-base font-bold font-mono text-brandPrimary">{selectedRecord.maintenanceCode}</span>
               </div>
+            </div>
+
+            {/* Director Approval Status Card */}
+            <div className={`p-3.5 rounded-xl border ${
+              selectedRecord.approvalStatus === 'APPROVED'
+                ? 'bg-emerald-950/20 border-emerald-500/30 text-emerald-300'
+                : selectedRecord.approvalStatus === 'REJECTED'
+                ? 'bg-rose-950/20 border-rose-500/30 text-rose-300'
+                : 'bg-amber-950/20 border-amber-500/30 text-amber-300'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase font-mono flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4" />
+                  Director Approval Status
+                </span>
+                <span className={`px-2.5 py-1 rounded text-xs font-mono font-bold border ${
+                  selectedRecord.approvalStatus === 'APPROVED'
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                    : selectedRecord.approvalStatus === 'REJECTED'
+                    ? 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                    : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                }`}>
+                  {selectedRecord.approvalStatus === 'APPROVED'
+                    ? 'APPROVED BY DIRECTOR'
+                    : selectedRecord.approvalStatus === 'REJECTED'
+                    ? 'REJECTED BY DIRECTOR'
+                    : 'PENDING — AWAITING DIRECTOR APPROVAL'}
+                </span>
+              </div>
+              {(selectedRecord.estimatedCost !== undefined && selectedRecord.estimatedCost !== null) || selectedRecord.repairCost ? (
+                <div className="mt-2.5 pt-2 border-t border-current/20 flex justify-between items-center text-xs">
+                  <span className="text-slate-400 font-mono">Proposed Maintenance Cost:</span>
+                  <strong className="font-mono font-bold text-sm text-emerald-400">
+                    ₹{Number(selectedRecord.estimatedCost || selectedRecord.repairCost || 0).toLocaleString()}
+                  </strong>
+                </div>
+              ) : null}
+              {selectedRecord.rejectionReason && (
+                <div className="mt-2.5 pt-2 border-t border-rose-500/30 text-xs text-rose-200">
+                  <strong className="block text-rose-400 font-mono text-[11px] uppercase">Rejection Reason:</strong>
+                  <p className="mt-1 p-2 rounded bg-rose-950/40 border border-rose-500/30 text-rose-100 font-medium">
+                    {selectedRecord.rejectionReason}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Hardware Device Card */}

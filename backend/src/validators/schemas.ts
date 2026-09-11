@@ -264,6 +264,7 @@ export const MaintenanceCreateSchema = z.object({
   serviceCost: z.number().optional().nullable(),
   otherCost: z.number().optional().nullable(),
   repairCost: z.number().optional().nullable(),
+  estimatedCost: z.number().optional().nullable(),
   repairStatus: z.nativeEnum(MaintenanceStatus).optional().default(MaintenanceStatus.OPEN),
   remarks: z.string().optional().nullable(),
   expectedSourceState: z

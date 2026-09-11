@@ -46,6 +46,7 @@ import {
   Send,
   Pencil,
   Trash2,
+  Wrench,
 } from 'lucide-react';
 
 export const ApprovalCenter: React.FC = () => {
@@ -91,6 +92,7 @@ export const ApprovalCenter: React.FC = () => {
   // Action Modals State
   const [actionType, setActionType] = useState<'APPROVE' | 'REJECT' | 'REQUEST_CHANGES' | 'CANCEL' | null>(null);
   const [targetRequestId, setTargetRequestId] = useState<string | null>(null);
+  const [targetRequest, setTargetRequest] = useState<any | null>(null);
   const [actionComment, setActionComment] = useState<string>('');
   const [actionSubmitting, setActionSubmitting] = useState<boolean>(false);
 
@@ -201,10 +203,16 @@ export const ApprovalCenter: React.FC = () => {
 
   const openActionModal = (
     type: 'APPROVE' | 'REJECT' | 'REQUEST_CHANGES' | 'CANCEL',
-    reqId: string
+    reqId: string,
+    reqObj?: any
   ) => {
     setActionType(type);
     setTargetRequestId(reqId);
+    const found =
+      reqObj ||
+      (selectedRequest?.id === reqId ? selectedRequest : approvals.find((a) => a.id === reqId)) ||
+      null;
+    setTargetRequest(found);
     setActionComment('');
   };
 
@@ -657,6 +665,7 @@ export const ApprovalCenter: React.FC = () => {
               }}
               options={[
                 { value: 'ALL', label: 'All Operation Types' },
+                { value: 'MAINTENANCE', label: 'Maintenance Cost Approval' },
                 { value: 'ASSIGNMENT', label: 'Asset Assignment' },
                 { value: 'TRANSFER', label: 'Asset Transfer' },
                 { value: 'RETURN_DISPOSITION', label: 'Return / Disposition' },
@@ -748,6 +757,7 @@ export const ApprovalCenter: React.FC = () => {
                 <th className="py-3 px-3.5">Asset Name / Model</th>
                 <th className="py-3 px-3.5">Requested By</th>
                 <th className="py-3 px-3.5">Department</th>
+                <th className="py-3 px-3.5 text-right font-mono">Proposed Cost</th>
                 <th className="py-3 px-3.5 text-center">Priority</th>
                 <th className="py-3 px-3.5">Submitted & SLA</th>
                 <th className="py-3 px-3.5 text-center">Step</th>
@@ -760,13 +770,13 @@ export const ApprovalCenter: React.FC = () => {
             <tbody className="divide-y divide-[#1E2535]/50">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="text-center py-16 text-slate-500 font-medium font-mono">
+                  <td colSpan={14} className="text-center py-16 text-slate-500 font-medium font-mono">
                     Loading Approval Requests...
                   </td>
                 </tr>
               ) : approvals.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="text-center py-16 text-slate-500 font-medium">
+                  <td colSpan={14} className="text-center py-16 text-slate-500 font-medium">
                     No approval requests found in this queue.
                   </td>
                 </tr>
@@ -775,12 +785,15 @@ export const ApprovalCenter: React.FC = () => {
                   const currentUserId = user?.id || (user as any)?.userId;
                   const isRequester = req.requestedById === currentUserId;
                   const isAdmin = user?.role?.code === 'ADMIN';
+                  const isDirector = user?.role?.code === 'DIRECTOR';
                   const isManager = user?.role?.code === 'MANAGER';
 
                   const isEligibleApprover =
                     req.status === 'PENDING' &&
                     !isRequester &&
-                    (isAdmin || isManager);
+                    (isAdmin ||
+                      isDirector ||
+                      (isManager && req.targetRole !== 'DIRECTOR' && (req.targetRole === 'MANAGER' || !req.targetRole)));
 
                   const canEditRow = (isRequester || isAdmin) && (req.status === 'PENDING' || req.status === 'CHANGES_REQUESTED');
                   const canCancelRow = (isRequester || isAdmin) && (req.status === 'PENDING' || req.status === 'CHANGES_REQUESTED');
@@ -820,6 +833,13 @@ export const ApprovalCenter: React.FC = () => {
                       <td className="py-3 px-3.5 text-slate-400">
                         {req.targetDepartment?.name || req.asset?.department?.name || '—'}
                       </td>
+                      <td className="py-3 px-3.5 text-right font-mono font-bold text-emerald-400">
+                        {req.parsedChanges?.proposedCost !== undefined
+                          ? `₹${Number(req.parsedChanges.proposedCost).toLocaleString()}`
+                          : req.parsedChanges?.estimatedCost !== undefined
+                          ? `₹${Number(req.parsedChanges.estimatedCost).toLocaleString()}`
+                          : '—'}
+                      </td>
                       <td className="py-3 px-3.5 text-center">
                         {renderPriorityBadge(req.priority)}
                       </td>
@@ -858,15 +878,15 @@ export const ApprovalCenter: React.FC = () => {
                             <>
                               <button
                                 title="Approve Request & Execute"
-                                onClick={() => openActionModal('APPROVE', req.id)}
-                                className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500 transition-colors"
+                                onClick={() => openActionModal('APPROVE', req.id, req)}
+                                className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
                               >
                                 <Check className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 title="Reject Request"
-                                onClick={() => openActionModal('REJECT', req.id)}
-                                className="p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 hover:border-rose-500 transition-colors"
+                                onClick={() => openActionModal('REJECT', req.id, req)}
+                                className="p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-500/20 transition-colors"
                               >
                                 <X className="w-3.5 h-3.5" />
                               </button>
@@ -1056,70 +1076,174 @@ export const ApprovalCenter: React.FC = () => {
               </div>
             )}
 
-            {/* PROPOSED CHANGE DIFF CARD (Section 8) */}
-            <div className="p-4 rounded-xl bg-[#0A0D15] border border-[#2B3550] space-y-3">
-              <h5 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
-                <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
-                Proposed State Changes (Diff)
-              </h5>
-
-              {/* Diff visualization */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="p-3 rounded-lg bg-[#141A28] border border-[#1E2535] space-y-1.5">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block pb-1 border-b border-[#1E2535]">
-                    Current State
+            {/* PROPOSED CHANGE CARD (Dedicated Maintenance Approval Card OR State Diff Card) */}
+            {selectedRequest.requestType === 'MAINTENANCE' ? (
+              <div className="p-4 rounded-xl bg-[#0A0D15] border border-amber-500/30 space-y-3.5">
+                <div className="flex items-center justify-between pb-2 border-b border-[#1E2535]">
+                  <h5 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-amber-400" />
+                    Maintenance Approval Details
+                  </h5>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[11px] font-semibold">
+                    Target Role: DIRECTOR
                   </span>
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span className="text-slate-500">Custodian:</span>
-                    <span>{selectedRequest.asset?.currentHolder?.fullName || 'IT Stock'}</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                  <div className="p-2.5 rounded-lg bg-[#141A28] border border-[#1E2535]">
+                    <span className="text-slate-400 block text-[10px] uppercase font-mono">Asset ID</span>
+                    <span className="font-mono font-bold text-indigo-300 text-sm">
+                      {selectedRequest.asset?.companyAssetId || selectedRequest.asset?.assetCode || selectedRequest.parsedChanges?.assetCode || '—'}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span className="text-slate-500">Department:</span>
-                    <span>{selectedRequest.asset?.department?.name || '—'}</span>
+
+                  <div className="p-2.5 rounded-lg bg-[#141A28] border border-[#1E2535]">
+                    <span className="text-slate-400 block text-[10px] uppercase font-mono">Asset Name / Model</span>
+                    <span className="font-semibold text-slate-200">
+                      {selectedRequest.asset?.model || selectedRequest.asset?.assetName || selectedRequest.parsedChanges?.assetName || '—'}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span className="text-slate-500">Location:</span>
-                    <span>{selectedRequest.asset?.locationRel?.name || selectedRequest.asset?.location || '—'}</span>
+
+                  <div className="p-2.5 rounded-lg bg-[#141A28] border border-[#1E2535]">
+                    <span className="text-slate-400 block text-[10px] uppercase font-mono">Serial Number</span>
+                    <span className="font-mono text-slate-300">
+                      {selectedRequest.asset?.serialNumber || selectedRequest.parsedChanges?.serialNumber || '—'}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-slate-300">
-                    <span className="text-slate-500">Status:</span>
-                    <span>{selectedRequest.asset?.status || 'AVAILABLE'}</span>
+
+                  <div className="p-2.5 rounded-lg bg-[#141A28] border border-[#1E2535]">
+                    <span className="text-slate-400 block text-[10px] uppercase font-mono">Maintenance Type</span>
+                    <span className="font-semibold text-sky-400">
+                      {selectedRequest.parsedChanges?.maintenanceType || 'CORRECTIVE'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-[#141A28] border border-[#1E2535]">
+                    <span className="text-slate-400 block text-[10px] uppercase font-mono">Service Provider / Vendor</span>
+                    <span className="font-medium text-slate-200">
+                      {selectedRequest.parsedChanges?.vendor || selectedRequest.parsedChanges?.serviceProvider || 'Internal IT Helpdesk'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                    <span className="text-emerald-300 block text-[10px] uppercase font-mono font-bold">Proposed Cost</span>
+                    <span className="font-mono font-bold text-lg text-emerald-400">
+                      ₹{(Number(selectedRequest.parsedChanges?.proposedCost ?? selectedRequest.parsedChanges?.estimatedCost ?? 0)).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-[#141A28] border border-[#1E2535]">
+                    <span className="text-slate-400 block text-[10px] uppercase font-mono">Requested By</span>
+                    <span className="font-medium text-slate-200">
+                      {selectedRequest.requestedBy?.employee?.fullName || selectedRequest.requestedBy?.username || selectedRequest.parsedChanges?.requestedBy || '—'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-[#141A28] border border-[#1E2535]">
+                    <span className="text-slate-400 block text-[10px] uppercase font-mono">Requesting Department</span>
+                    <span className="font-medium text-slate-200">
+                      {selectedRequest.targetDepartment?.name || selectedRequest.asset?.department?.name || selectedRequest.parsedChanges?.department || '—'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-[#141A28] border border-[#1E2535]">
+                    <span className="text-slate-400 block text-[10px] uppercase font-mono">Submission Date / Time</span>
+                    <span className="font-mono text-slate-300">
+                      {formatDateTimeIST(selectedRequest.requestedAt)}
+                    </span>
                   </div>
                 </div>
 
-                <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 space-y-1.5">
-                  <span className="text-[10px] font-bold text-indigo-300 uppercase font-mono block pb-1 border-b border-indigo-500/20">
-                    Proposed State
-                  </span>
-                  <div className="flex items-center justify-between text-white font-medium">
-                    <span className="text-indigo-300">New Custodian:</span>
-                    <span className="text-emerald-400">
-                      {selectedRequest.parsedChanges?.newHolderName ||
-                        selectedRequest.parsedChanges?.employeeName ||
-                        (selectedRequest.parsedChanges?.newHolderId ? 'Assigned Employee' : '—')}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-white font-medium">
-                    <span className="text-indigo-300">Department:</span>
-                    <span>
-                      {selectedRequest.parsedChanges?.newDepartmentName ||
-                        selectedRequest.targetDepartment?.name ||
-                        '—'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-white font-medium">
-                    <span className="text-indigo-300">Location:</span>
-                    <span>{selectedRequest.parsedChanges?.newLocationName || '—'}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-white font-medium">
-                    <span className="text-indigo-300">Target Status:</span>
-                    <span className="text-amber-300">
-                      {selectedRequest.parsedChanges?.targetStatus ||
-                        (selectedRequest.requestType === 'ASSIGNMENT' ? 'ASSIGNED' : 'TRANSFERRED')}
-                    </span>
+                <div className="p-3 rounded-lg bg-[#141A28] border border-[#1E2535] space-y-1">
+                  <span className="text-slate-400 block text-[10px] uppercase font-mono">Maintenance Issue & Description</span>
+                  <p className="text-sm font-semibold text-white">
+                    {selectedRequest.reason || selectedRequest.parsedChanges?.issueTitle || 'Maintenance Request'}
+                  </p>
+                  {(selectedRequest.comments || selectedRequest.parsedChanges?.issueDescription) && (
+                    <p className="text-xs text-slate-300 whitespace-pre-wrap pt-1">
+                      {selectedRequest.comments || selectedRequest.parsedChanges?.issueDescription}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-[#121624] border border-[#1E2535] text-xs">
+                  <span className="text-slate-400 font-mono">Current Approval Status:</span>
+                  <div className="flex items-center gap-2">
+                    {renderStatusBadge(selectedRequest.status)}
+                    {selectedRequest.decisionBy && (
+                      <span className="text-slate-400 text-[11px]">
+                        by {selectedRequest.decisionBy.employee?.fullName || selectedRequest.decisionBy.username} on {formatDateTimeIST(selectedRequest.decisionAt)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-[#0A0D15] border border-[#2B3550] space-y-3">
+                <h5 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <ArrowRight className="w-3.5 h-3.5 text-indigo-400" />
+                  Proposed State Changes (Diff)
+                </h5>
+
+                {/* Diff visualization */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-[#141A28] border border-[#1E2535] space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase font-mono block pb-1 border-b border-[#1E2535]">
+                      Current State
+                    </span>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-500">Custodian:</span>
+                      <span>{selectedRequest.asset?.currentHolder?.fullName || 'IT Stock'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-500">Department:</span>
+                      <span>{selectedRequest.asset?.department?.name || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-500">Location:</span>
+                      <span>{selectedRequest.asset?.locationRel?.name || selectedRequest.asset?.location || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-500">Status:</span>
+                      <span>{selectedRequest.asset?.status || 'AVAILABLE'}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/30 space-y-1.5">
+                    <span className="text-[10px] font-bold text-indigo-300 uppercase font-mono block pb-1 border-b border-indigo-500/20">
+                      Proposed State
+                    </span>
+                    <div className="flex items-center justify-between text-white font-medium">
+                      <span className="text-indigo-300">New Custodian:</span>
+                      <span className="text-emerald-400">
+                        {selectedRequest.parsedChanges?.newHolderName ||
+                          selectedRequest.parsedChanges?.employeeName ||
+                          (selectedRequest.parsedChanges?.newHolderId ? 'Assigned Employee' : '—')}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-white font-medium">
+                      <span className="text-indigo-300">Department:</span>
+                      <span>
+                        {selectedRequest.parsedChanges?.newDepartmentName ||
+                          selectedRequest.targetDepartment?.name ||
+                          '—'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-white font-medium">
+                      <span className="text-indigo-300">Location:</span>
+                      <span>{selectedRequest.parsedChanges?.newLocationName || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-white font-medium">
+                      <span className="text-indigo-300">Target Status:</span>
+                      <span className="text-amber-300">
+                        {selectedRequest.parsedChanges?.targetStatus ||
+                          (selectedRequest.requestType === 'ASSIGNMENT' ? 'ASSIGNED' : 'TRANSFERRED')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
               {/* Justification & Remarks */}
               {(selectedRequest.reason || selectedRequest.comments) && (
@@ -1145,7 +1269,7 @@ export const ApprovalCenter: React.FC = () => {
                   <p className="text-amber-200">{selectedRequest.changesRequested}</p>
                 </div>
               )}
-            </div>
+
 
             {/* IMMUTABLE APPROVAL TIMELINE / HISTORY (Section 11) */}
             <div>
@@ -1180,19 +1304,19 @@ export const ApprovalCenter: React.FC = () => {
                   <>
                     <Button
                       variant="primary"
-                      onClick={() => openActionModal('APPROVE', selectedRequest.id)}
+                      onClick={() => openActionModal('APPROVE', selectedRequest.id, selectedRequest)}
                     >
-                      <Check className="w-4 h-4 mr-1.5" /> Approve & Execute
+                      <Check className="w-4 h-4 mr-1.5" /> Approve
                     </Button>
                     <Button
                       variant="danger"
-                      onClick={() => openActionModal('REJECT', selectedRequest.id)}
+                      onClick={() => openActionModal('REJECT', selectedRequest.id, selectedRequest)}
                     >
                       <X className="w-4 h-4 mr-1.5" /> Reject
                     </Button>
                     <Button
                       variant="secondary"
-                      onClick={() => openActionModal('REQUEST_CHANGES', selectedRequest.id)}
+                      onClick={() => openActionModal('REQUEST_CHANGES', selectedRequest.id, selectedRequest)}
                     >
                       <RotateCcw className="w-4 h-4 mr-1.5" /> Request Changes
                     </Button>
@@ -1253,16 +1377,48 @@ export const ApprovalCenter: React.FC = () => {
         <form onSubmit={handleActionSubmit} className="space-y-4">
           {actionType === 'APPROVE' && (
             <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-start gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">Transaction Execution Confirmation</p>
-                  <p className="text-slate-300 mt-1">
-                    Approving will immediately and atomically execute this operation. Hardware allocation,
-                    location, and immutable asset history will be updated in PostgreSQL.
+              {targetRequest?.requestType === 'MAINTENANCE' ? (
+                <div className="p-3.5 rounded-xl bg-[#141A28] border border-emerald-500/40 space-y-2.5">
+                  <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                    <span>Approve Maintenance?</span>
+                  </div>
+                  <div className="space-y-1.5 pt-1 text-xs border-t border-[#1E2535]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Asset:</span>
+                      <span className="font-mono font-bold text-indigo-300">
+                        {targetRequest.asset?.companyAssetId || targetRequest.asset?.assetCode || targetRequest.parsedChanges?.assetCode} — {targetRequest.asset?.model || targetRequest.asset?.assetName || targetRequest.parsedChanges?.assetName || ''}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Maintenance:</span>
+                      <span className="text-slate-200 font-medium max-w-xs text-right truncate">
+                        {targetRequest.reason || targetRequest.parsedChanges?.issueTitle || targetRequest.comments}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-1 border-t border-[#1E2535]">
+                      <span className="text-slate-400">Proposed Cost:</span>
+                      <span className="font-mono font-bold text-base text-emerald-400">
+                        ₹{(Number(targetRequest.parsedChanges?.proposedCost ?? targetRequest.parsedChanges?.estimatedCost ?? 0)).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-slate-300 text-xs pt-1 font-medium">
+                    Are you sure you want to approve this maintenance request?
                   </p>
                 </div>
-              </div>
+              ) : (
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Transaction Execution Confirmation</p>
+                    <p className="text-slate-300 mt-1">
+                      Approving will immediately and atomically execute this operation. Hardware allocation,
+                      location, and immutable asset history will be updated in PostgreSQL.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
@@ -1272,7 +1428,7 @@ export const ApprovalCenter: React.FC = () => {
                   rows={2}
                   value={actionComment}
                   onChange={(e) => setActionComment(e.target.value)}
-                  placeholder="Approved for project deployment..."
+                  placeholder="Approved for service execution..."
                   className="w-full bg-[#121624] border border-[#2B3550] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -1284,23 +1440,22 @@ export const ApprovalCenter: React.FC = () => {
               <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-start gap-2">
                 <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold">Request Rejection</p>
+                  <p className="font-bold">Reject Maintenance Proposal</p>
                   <p className="text-slate-300 mt-1">
-                    The requested operation will NOT execute and the asset will remain in its current state.
-                    The requester will be notified.
+                    The maintenance request will NOT proceed. The manager will be notified of this rejection and the reason provided below.
                   </p>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Reason for Rejection *
+                  Rejection Reason <span className="text-rose-400">*</span>
                 </label>
                 <textarea
                   rows={3}
                   value={actionComment}
                   onChange={(e) => setActionComment(e.target.value)}
-                  placeholder="State clear justification for rejecting this proposal..."
+                  placeholder="Explain why this maintenance request was rejected..."
                   className="w-full bg-[#121624] border border-[#2B3550] rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500"
                   required
                 />

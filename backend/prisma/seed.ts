@@ -94,6 +94,16 @@ async function main() {
     },
   });
 
+  const directorRole = await prisma.role.upsert({
+    where: { code: 'DIRECTOR' },
+    update: {},
+    create: {
+      name: 'Director',
+      code: 'DIRECTOR',
+      description: 'Executive management authority with comprehensive operational oversight and maintenance approval control.',
+    },
+  });
+
   // Assign Permissions to Roles
   const allPermissionIds = Object.values(permissions).map((p) => p.id);
   for (const pId of allPermissionIds) {
@@ -141,6 +151,26 @@ async function main() {
         where: { roleId_permissionId: { roleId: userRole.id, permissionId: permissions[code].id } },
         update: {},
         create: { roleId: userRole.id, permissionId: permissions[code].id },
+      });
+    }
+  }
+
+  const directorPermCodes = [
+    'ASSET_CREATE', 'ASSET_VIEW', 'ASSET_UPDATE', 'ASSET_DEACTIVATE',
+    'EMPLOYEE_CREATE', 'EMPLOYEE_VIEW', 'EMPLOYEE_UPDATE', 'EMPLOYEE_DEACTIVATE',
+    'ASSIGNMENT_CREATE', 'ASSIGNMENT_APPROVE',
+    'TRANSFER_CREATE', 'TRANSFER_APPROVE',
+    'RETURN_CREATE', 'RETURN_APPROVE',
+    'MAINTENANCE_CREATE', 'MAINTENANCE_UPDATE', 'MAINTENANCE_APPROVE',
+    'REPORT_VIEW', 'REPORT_EXPORT', 'AUDIT_VIEW',
+    'DEPARTMENT_MANAGE', 'LOCATION_MANAGE'
+  ];
+  for (const code of directorPermCodes) {
+    if (permissions[code]) {
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: directorRole.id, permissionId: permissions[code].id } },
+        update: {},
+        create: { roleId: directorRole.id, permissionId: permissions[code].id },
       });
     }
   }
@@ -320,6 +350,18 @@ async function main() {
       passwordHash: passUser,
       employeeId: empUser.id,
       roleId: userRole.id,
+      isActive: true,
+    },
+  });
+
+  const passDirector = await bcrypt.hash('director123', 10);
+  const userDirectorObj = await prisma.user.upsert({
+    where: { username: 'director' },
+    update: {},
+    create: {
+      username: 'director',
+      passwordHash: passDirector,
+      roleId: directorRole.id,
       isActive: true,
     },
   });

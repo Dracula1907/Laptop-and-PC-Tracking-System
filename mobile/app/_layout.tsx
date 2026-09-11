@@ -36,7 +36,7 @@ function RootNavigation() {
       const role = user.roleCode;
 
       if (isLoginScreen) {
-        if (role === 'ADMIN') {
+        if (role === 'ADMIN' || role === 'DIRECTOR') {
           router.replace('/(admin)/dashboard');
         } else if (role === 'MANAGER') {
           router.replace('/(manager)/dashboard');
@@ -49,14 +49,14 @@ function RootNavigation() {
             router.replace('/(guard)/home');
           }
         }
-      } else if (currentSegment === '(admin)' && role !== 'ADMIN') {
+      } else if (currentSegment === '(admin)' && role !== 'ADMIN' && role !== 'DIRECTOR') {
         if (role === 'MANAGER') router.replace('/(manager)/dashboard');
         else if (role === 'SECURITY_GUARD') router.replace('/(guard)/home');
       } else if (currentSegment === '(manager)' && role !== 'MANAGER') {
-        if (role === 'ADMIN') router.replace('/(admin)/dashboard');
+        if (role === 'ADMIN' || role === 'DIRECTOR') router.replace('/(admin)/dashboard');
         else if (role === 'SECURITY_GUARD') router.replace('/(guard)/home');
       } else if (currentSegment === '(guard)' && role !== 'SECURITY_GUARD') {
-        if (role === 'ADMIN') router.replace('/(admin)/dashboard');
+        if (role === 'ADMIN' || role === 'DIRECTOR') router.replace('/(admin)/dashboard');
         else if (role === 'MANAGER') router.replace('/(manager)/dashboard');
       }
     }

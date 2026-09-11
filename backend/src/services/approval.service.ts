@@ -56,6 +56,7 @@ export class ApprovalService {
   public static async getApprovalCounts(user: any) {
     const { id, roleCode } = this.normalizeUser(user);
     const isAdmin = roleCode === 'ADMIN';
+    const isDirector = roleCode === 'DIRECTOR';
     const isManager = roleCode === 'MANAGER';
 
     const [total, pending, approved, rejected, changesRequested, myRequests, urgent] = await Promise.all([
@@ -80,6 +81,14 @@ export class ApprovalService {
         where: {
           status: ApprovalStatus.PENDING,
           requestedById: { not: id },
+        },
+      });
+    } else if (isDirector) {
+      pendingMyAction = await prisma.approvalRequest.count({
+        where: {
+          status: ApprovalStatus.PENDING,
+          requestedById: { not: id },
+          OR: [{ targetRole: 'DIRECTOR' }, { targetRole: 'MANAGER' }, { targetRole: null }],
         },
       });
     } else if (isManager) {
@@ -129,6 +138,8 @@ export class ApprovalService {
     const where: Prisma.ApprovalRequestWhereInput = {};
     const { id, roleCode } = this.normalizeUser(user);
     const isAdmin = roleCode === 'ADMIN';
+    const isDirector = roleCode === 'DIRECTOR';
+    const isManager = roleCode === 'MANAGER';
 
     // Queue filter
     if (query.queue === 'my_requests') {
@@ -136,7 +147,11 @@ export class ApprovalService {
     } else if (query.queue === 'pending_my_approval') {
       where.status = ApprovalStatus.PENDING;
       where.requestedById = { not: id }; // Self-approval blocked
-      if (!isAdmin) {
+      if (isAdmin) {
+        // Admin sees all pending
+      } else if (isDirector) {
+        where.OR = [{ targetRole: 'DIRECTOR' }, { targetRole: 'MANAGER' }, { targetRole: null }];
+      } else if (isManager) {
         where.OR = [{ targetRole: 'MANAGER' }, { targetRole: null }];
       }
     }
@@ -214,8 +229,21 @@ export class ApprovalService {
       }),
     ]);
 
+    const formattedRequests = requests.map((r) => {
+      let parsedChanges: any = null;
+      try {
+        parsedChanges = JSON.parse(r.proposedChanges);
+      } catch {
+        parsedChanges = r.proposedChanges;
+      }
+      return {
+        ...r,
+        parsedChanges,
+      };
+    });
+
     return {
-      requests,
+      requests: formattedRequests,
       pagination: {
         total,
         page,
@@ -274,6 +302,7 @@ export class ApprovalService {
     const allowSelf = policy?.allowSelfApproval || false;
     const isRequester = request.requestedById === currentUserId;
     const isAdmin = roleCode === 'ADMIN';
+    const isDirector = roleCode === 'DIRECTOR';
     const isManager = roleCode === 'MANAGER';
 
     // Capabilities
@@ -283,7 +312,9 @@ export class ApprovalService {
     const canApprove =
       isPending &&
       (!isRequester || allowSelf) &&
-      (isAdmin || (isManager && (request.targetRole === 'MANAGER' || !request.targetRole)));
+      (isAdmin ||
+        isDirector ||
+        (isManager && request.targetRole !== 'DIRECTOR' && (request.targetRole === 'MANAGER' || !request.targetRole)));
 
     const canReject = canApprove;
     const canRequestChanges = canApprove;
@@ -453,7 +484,17 @@ export class ApprovalService {
         throw new Error('This request has already been processed.');
       }
 
-      // 2. Self-Approval Protection
+      // 2. Role Authorization & Self-Approval Protection
+      const { roleCode } = this.normalizeUser(user);
+      const isAdmin = roleCode === 'ADMIN';
+      const isDirector = roleCode === 'DIRECTOR';
+
+      if (request.targetRole === 'DIRECTOR' || request.requestType === ApprovalRequestType.MAINTENANCE) {
+        if (!isAdmin && !isDirector) {
+          throw new Error('Forbidden: Only Director or System Administrator can approve maintenance requests.');
+        }
+      }
+
       const policy = await ApprovalPolicyService.getPolicy(request.requestType);
       if (request.requestedById === effectiveUserId && !policy?.allowSelfApproval) {
         throw new Error('You cannot approve your own request.');
@@ -473,7 +514,11 @@ export class ApprovalService {
           if (expected.locationId !== undefined && (currentAsset.locationId || null) !== (expected.locationId || null)) {
             throw new Error('This request is no longer valid because the asset state has changed.');
           }
-          if (expected.status !== undefined && currentAsset.status !== expected.status) {
+          if (
+            expected.status !== undefined &&
+            currentAsset.status !== expected.status &&
+            !(request.requestType === ApprovalRequestType.MAINTENANCE && currentAsset.status === AssetStatus.UNDER_REPAIR)
+          ) {
             throw new Error('This request is no longer valid because the asset state has changed.');
           }
         } catch (e: any) {
@@ -767,6 +812,25 @@ export class ApprovalService {
             remarks: `Maintenance ticket completed via approval ${request.requestCode}`,
           });
         }
+      } else if (request.requestType === ApprovalRequestType.MAINTENANCE) {
+        if (request.relatedEntityId) {
+          await tx.maintenanceRecord.updateMany({
+            where: { id: request.relatedEntityId },
+            data: {
+              approvalStatus: 'APPROVED',
+              approvedById: effectiveUserId,
+            },
+          });
+        }
+        if (request.assetId) {
+          await HistoryService.recordEvent(tx, {
+            assetId: request.assetId,
+            action: AssetAction.MAINTENANCE_UPDATED,
+            performedById: effectiveUserId,
+            eventDate: now,
+            remarks: `Maintenance approved by Director (${effectiveUsername}): ${request.requestCode}. Proposed cost: INR ${(changes.proposedCost || changes.estimatedCost || 0).toLocaleString()}`,
+          });
+        }
       } else if (request.requestType === ApprovalRequestType.SENSITIVE_UPDATE && request.assetId) {
         const updatePayload: any = {};
         if (changes.serialNumber !== undefined) updatePayload.serialNumber = changes.serialNumber;
@@ -870,6 +934,17 @@ export class ApprovalService {
         throw new Error('This request has already been processed.');
       }
 
+      // 2. Role Authorization & Self-Approval Protection
+      const { roleCode } = this.normalizeUser(user);
+      const isAdmin = roleCode === 'ADMIN';
+      const isDirector = roleCode === 'DIRECTOR';
+
+      if (request.targetRole === 'DIRECTOR' || request.requestType === ApprovalRequestType.MAINTENANCE) {
+        if (!isAdmin && !isDirector) {
+          throw new Error('Forbidden: Only Director or System Administrator can reject maintenance requests.');
+        }
+      }
+
       const policy = await ApprovalPolicyService.getPolicy(request.requestType);
       if (request.requestedById === effectiveUserId && !policy?.allowSelfApproval) {
         throw new Error('You cannot reject your own request.');
@@ -902,6 +977,26 @@ export class ApprovalService {
           where: { id: request.relatedEntityId },
           data: { status: WorkflowStatus.CANCELLED },
         });
+      }
+
+      // Update linked Maintenance record status if applicable
+      if (request.requestType === ApprovalRequestType.MAINTENANCE && request.relatedEntityId) {
+        await tx.maintenanceRecord.updateMany({
+          where: { id: request.relatedEntityId },
+          data: {
+            approvalStatus: 'REJECTED',
+            rejectionReason: data.rejectionReason,
+          },
+        });
+        if (request.assetId) {
+          await HistoryService.recordEvent(tx, {
+            assetId: request.assetId,
+            action: AssetAction.MAINTENANCE_UPDATED,
+            performedById: effectiveUserId,
+            eventDate: now,
+            remarks: `Maintenance rejected by Director (${effectiveUsername}): ${request.requestCode}. Reason: ${data.rejectionReason}`,
+          });
+        }
       }
 
       await tx.approvalHistory.create({

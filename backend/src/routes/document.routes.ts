@@ -10,5 +10,6 @@ router.post('/', requirePermission('ASSET_UPDATE'), DocumentController.generateD
 router.get('/', requirePermission('ASSET_VIEW'), DocumentController.getDocuments);
 router.get('/:id', requirePermission('ASSET_VIEW'), DocumentController.getDocumentById);
 router.post('/:id/void', requirePermission('ASSET_DEACTIVATE'), DocumentController.voidDocument);
+router.delete('/:id', requirePermission('ASSET_DEACTIVATE'), DocumentController.deleteDocument);
 
 export default router;

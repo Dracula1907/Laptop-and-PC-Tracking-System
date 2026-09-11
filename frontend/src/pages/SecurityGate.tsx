@@ -710,15 +710,7 @@ export const SecurityGate: React.FC = () => {
               </button>
             )}
 
-            {operationsTab === 'gates' && (
-              <button
-                onClick={() => setShowGateModal(true)}
-                className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Register New Gate
-              </button>
-            )}
+
           </div>
 
           {/* Sub-Tab Content 1: Currently Outside */}
@@ -943,12 +935,7 @@ export const SecurityGate: React.FC = () => {
                     }}
                     className="w-full bg-[#121828] border border-[#212C44] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-cyan-500"
                   >
-                    <option value="">All Physical Gates</option>
-                    {gates.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name} ({g.code})
-                      </option>
-                    ))}
+                    <option value="">Main Security Gate (GATE-01)</option>
                   </select>
                 </div>
 

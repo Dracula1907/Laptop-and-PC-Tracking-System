@@ -919,7 +919,7 @@ export class HistoryService {
               performedByName: mt.reportedBy?.username || 'Admin',
               eventDate: mt.repairStartDate || mt.reportedAt || mt.createdAt,
               reason: mt.issueTitle,
-              remarks: `${mt.issueDescription || ''} (Technician: ${mt.technician || 'N/A'}, Cost: ₹${mt.repairCost})`,
+              remarks: `${mt.issueDescription || ''} (Technician: ${mt.technician || 'N/A'}, Cost: INR ${mt.repairCost})`,
             },
           });
           maintenanceCount++;

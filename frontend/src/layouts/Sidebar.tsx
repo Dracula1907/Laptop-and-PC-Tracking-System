@@ -26,6 +26,7 @@ import {
   ScanLine,
   QrCode,
   MapPinned,
+  LogOut,
 } from 'lucide-react';
 
 
@@ -84,7 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
       <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4 relative font-sans">
         {isUser ? (
           <div>
-            {!collapsed && <p className="px-2 text-[9px] font-bold text-slate-600 uppercase tracking-widest mb-1 font-mono">MY PORTAL</p>}
+            {!collapsed && <p className="px-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-mono">MY PORTAL</p>}
             <nav className="space-y-0.5">
               <NavItem to="/my-assets" icon={<Laptop className="w-4 h-4" />} label="My Assets" collapsed={collapsed} />
               <NavItem to="/my-maintenance" icon={<Wrench className="w-4 h-4" />} label="My Maintenance" collapsed={collapsed} />
@@ -97,7 +98,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             {/* LIFECYCLE MANAGEMENT */}
             <div>
               {!collapsed && (
-                <p className="px-2 text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 font-mono">
+                <p className="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-mono">
                   LIFECYCLE MANAGEMENT
                 </p>
               )}
@@ -115,6 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                 <NavItem to="/documents" icon={<FileCheck className="w-4 h-4 text-emerald-400" />} label="Official Documents" collapsed={collapsed} />
                 <NavItem to="/retirements" icon={<Archive className="w-4 h-4 text-rose-400" />} label="Retirement & Replacement" collapsed={collapsed} />
                 <NavItem to="/security-gate" icon={<QrCode className="w-4 h-4 text-cyan-400" />} label="QR & Security Gate" collapsed={collapsed} />
+                <NavItem to="/outside-laptops" icon={<LogOut className="w-4 h-4 text-amber-400" />} label="Outside Laptop" collapsed={collapsed} />
               </nav>
 
             </div>
@@ -122,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             {/* ORGANIZATION */}
             <div>
               {!collapsed && (
-                <p className="px-2 text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 font-mono">
+                <p className="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-mono">
                   ORGANIZATION
                 </p>
               )}
@@ -136,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             {/* ANALYTICS */}
             <div>
               {!collapsed && (
-                <p className="px-2 text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 font-mono">
+                <p className="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-mono">
                   ANALYTICS
                 </p>
               )}
@@ -150,7 +152,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
             {(roleCode === 'ADMIN' || roleCode === 'MANAGER') && (
               <div>
                 {!collapsed && (
-                  <p className="px-2 text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1 font-mono">
+                  <p className="px-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-mono">
                     ADMINISTRATION
                   </p>
                 )}
@@ -187,7 +189,7 @@ const NavItem: React.FC<NavItemProps> = ({ to, icon, label, collapsed }) => {
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `flex items-center px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-all duration-150 relative ${
+        `flex items-center px-2.5 py-1.5 text-sm font-semibold rounded-lg transition-all duration-150 relative ${
           isActive
             ? 'bg-gradient-to-r from-[#3B2C6E]/80 to-[#4B3586]/60 border border-[#6B4FB8]/70 text-white shadow-[0_0_12px_rgba(107,79,184,0.3)]'
             : 'text-slate-400 hover:bg-[#131929] hover:text-slate-200'

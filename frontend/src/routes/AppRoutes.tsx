@@ -33,6 +33,7 @@ import { Documents } from '../pages/Documents';
 import { Retirement } from '../pages/Retirement';
 import { SecurityGate } from '../pages/SecurityGate';
 import { SiteLaptops } from '../pages/SiteLaptops';
+import { OutsideLaptops } from '../pages/OutsideLaptops';
 
 export const AppRoutes: React.FC = () => {
   return (
@@ -67,6 +68,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/qr" element={<SecurityGate />} />
           <Route path="/qr-scanner" element={<SecurityGate />} />
           <Route path="/gate" element={<SecurityGate />} />
+          <Route path="/outside-laptops" element={<OutsideLaptops />} />
+          <Route path="/outside-laptop" element={<OutsideLaptops />} />
 
           <Route path="/employees" element={<Employees />} />
           <Route path="/employees/:id" element={<EmployeeDetail />} />

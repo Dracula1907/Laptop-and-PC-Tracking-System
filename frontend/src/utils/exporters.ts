@@ -617,9 +617,9 @@ export const exportRetirementsToExcel = (retirements: any[], customFilename?: st
 };
 
 /**
- * Generate Print-Friendly Corporate A4 PDF for Official Documents
+ * Build Corporate A4 jsPDF Document for Official Documents
  */
-export const exportOfficialDocumentPDF = (docData: any) => {
+export const buildOfficialDocumentPDF = (docData: any): jsPDF => {
   const doc = new jsPDF('portrait', 'mm', 'a4');
   const snapshot = docData.parsedSnapshot || {};
 
@@ -639,14 +639,15 @@ export const exportOfficialDocumentPDF = (docData: any) => {
   // Document Metadata Pill
   doc.setTextColor(50, 50, 50);
   doc.setFontSize(9);
-  doc.text(`Document No: ${docData.documentNumber}`, 14, 35);
-  doc.text(`Generated: ${new Date(docData.generatedAt || Date.now()).toLocaleString('en-GB')}`, 14, 40);
-  doc.text(`Version: v${docData.version || 1}  |  Status: ${docData.status}`, 14, 45);
-  doc.text(`Integrity Hash: ${docData.fileHash ? docData.fileHash.slice(0, 24) + '...' : 'VERIFIED'}`, 14, 50);
+  doc.text(`Document No: ${docData.documentNumber}`, 14, 34);
+  const genDateStr = new Date(docData.generatedAt || Date.now()).toLocaleString('en-GB');
+  doc.text(`Generated: ${genDateStr}`, 14, 39);
+  doc.text(`Version: v${docData.version || 1}  |  Status: ${docData.status}`, 14, 44);
+  doc.text(`Integrity Hash: ${docData.fileHash ? docData.fileHash.slice(0, 28) + '...' : 'VERIFIED'}`, 14, 49);
 
-  let currentY = 56;
+  let currentY = 55;
 
-  // Key Parties Section
+  // Key Parties & Asset Section
   const partyRows: any[] = [];
   if (snapshot.employee) {
     partyRows.push([
@@ -659,9 +660,9 @@ export const exportOfficialDocumentPDF = (docData: any) => {
   if (snapshot.from && snapshot.to) {
     partyRows.push([
       'Transfer From',
-      `${snapshot.from.employee} (${snapshot.from.department})`,
+      `${snapshot.from.employee || 'IT Stock'} (${snapshot.from.department || '—'})`,
       'Transfer To',
-      `${snapshot.to.employee} (${snapshot.to.department})`,
+      `${snapshot.to.employee || 'IT Stock'} (${snapshot.to.department || '—'})`,
     ]);
   }
   if (snapshot.asset) {
@@ -669,7 +670,40 @@ export const exportOfficialDocumentPDF = (docData: any) => {
       'Asset Code / Name',
       `${snapshot.asset.assetCode} — ${snapshot.asset.assetName || snapshot.asset.model || ''}`,
       'Type / Serial No',
-      `${snapshot.asset.assetType} — ${snapshot.asset.serialNumber || 'N/A'}`,
+      `${snapshot.asset.assetType} — ${snapshot.asset.serialNumber || '—'}`,
+    ]);
+    if (snapshot.asset.location || snapshot.asset.department) {
+      partyRows.push([
+        'Asset Location',
+        snapshot.asset.location || '—',
+        'Asset Department',
+        snapshot.asset.department || '—',
+      ]);
+    }
+  }
+
+  // Document Specific Rows
+  if (snapshot.documentType === 'RETIREMENT' || docData.documentType === 'RETIREMENT') {
+    partyRows.push([
+      'Retirement Reason',
+      snapshot.reason || 'Lifecycle Retirement',
+      'Disposal Method',
+      snapshot.disposalMethod || 'Recycling / Disposal',
+    ]);
+    if (snapshot.finalCondition || snapshot.finalLocation) {
+      partyRows.push([
+        'Final Condition',
+        snapshot.finalCondition || 'SCRAP',
+        'Salvage Facility',
+        snapshot.finalLocation || 'Faith IT Salvage',
+      ]);
+    }
+  } else if (snapshot.documentType === 'RETURN_RECEIPT' || docData.documentType === 'RETURN_RECEIPT') {
+    partyRows.push([
+      'Condition at Return',
+      snapshot.conditionAtReturn || 'GOOD',
+      'Inspection Status',
+      'PASSED / VERIFIED',
     ]);
   }
 
@@ -677,13 +711,13 @@ export const exportOfficialDocumentPDF = (docData: any) => {
     (doc as any).autoTable({
       body: partyRows,
       startY: currentY,
-      styles: { fontSize: 8, cellPadding: 2 },
+      styles: { fontSize: 8, cellPadding: 2.5 },
       columnStyles: {
         0: { fontStyle: 'bold', fillColor: [245, 247, 250], width: 35 },
         2: { fontStyle: 'bold', fillColor: [245, 247, 250], width: 35 },
       },
     });
-    currentY = (doc as any).lastAutoTable.finalY + 8;
+    currentY = (doc as any).lastAutoTable.finalY + 7;
   }
 
   // Hardware Specs Table (if available)
@@ -709,7 +743,7 @@ export const exportOfficialDocumentPDF = (docData: any) => {
         2: { fontStyle: 'bold', fillColor: [245, 247, 250], width: 35 },
       },
     });
-    currentY = (doc as any).lastAutoTable.finalY + 8;
+    currentY = (doc as any).lastAutoTable.finalY + 7;
   }
 
   // Clearance Items Table (if clearance)
@@ -733,7 +767,19 @@ export const exportOfficialDocumentPDF = (docData: any) => {
       headStyles: { fillColor: [40, 50, 70] },
       styles: { fontSize: 8, cellPadding: 2 },
     });
-    currentY = (doc as any).lastAutoTable.finalY + 12;
+    currentY = (doc as any).lastAutoTable.finalY + 8;
+  }
+
+  // Remarks section
+  if (snapshot.remarks || docData.remarks) {
+    const remarkText = snapshot.remarks || docData.remarks;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Compliance Remarks / Notes:', 14, currentY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(remarkText, 14, currentY + 5);
+    currentY += 12;
   }
 
   // Sign-off / Signature section
@@ -746,7 +792,7 @@ export const exportOfficialDocumentPDF = (docData: any) => {
   doc.text('Employee / Holder Signature', 14, signY + 5);
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  doc.text(snapshot.employee?.fullName || 'Acknowledged', 14, signY + 9);
+  doc.text(snapshot.employee?.fullName || 'Acknowledged & Received', 14, signY + 9);
 
   doc.line(140, signY, 196, signY);
   doc.setTextColor(50, 50, 50);
@@ -754,14 +800,33 @@ export const exportOfficialDocumentPDF = (docData: any) => {
   doc.text('Authorized IT Representative', 140, signY + 5);
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
-  doc.text(snapshot.assignedBy || snapshot.requestedBy || snapshot.initiatedBy || 'Faith ITAM Authority', 140, signY + 9);
+  const authorSign = docData.generatedBy?.username || snapshot.assignedBy || snapshot.requestedBy || snapshot.initiatedBy || 'Faith IT Authority';
+  doc.text(authorSign, 140, signY + 9);
 
   // Footer Note
   doc.setFontSize(7);
   doc.setTextColor(130, 130, 130);
   doc.text('This is an official system-generated document issued by Faith Automation IT Inventory System. All rights reserved.', 14, 285);
 
+  return doc;
+};
+
+/**
+ * Generate & Download Print-Friendly Corporate A4 PDF for Official Documents
+ */
+export const exportOfficialDocumentPDF = (docData: any) => {
+  const doc = buildOfficialDocumentPDF(docData);
   doc.save(`${docData.documentNumber}.pdf`);
+};
+
+/**
+ * Directly open print dialog for Official Document PDF
+ */
+export const printOfficialDocumentPDF = (docData: any) => {
+  const doc = buildOfficialDocumentPDF(docData);
+  doc.autoPrint();
+  const blobUrl = doc.output('bloburl');
+  window.open(blobUrl, '_blank');
 };
 
 /**

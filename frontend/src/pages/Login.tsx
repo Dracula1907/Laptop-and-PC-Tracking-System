@@ -128,6 +128,24 @@ export const Login: React.FC = () => {
 
             <button
               type="button"
+              onClick={() => handleQuickLogin('director', 'director123')}
+              className="p-2 rounded bg-slate-900 border border-slate-800 hover:border-rose-400 text-slate-300 text-left transition-colors"
+            >
+              <span className="font-bold text-rose-400 block">DIRECTOR</span>
+              <span className="text-[10px] text-slate-400">director / director123</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleQuickLogin('guard', 'guard123')}
+              className="p-2 rounded bg-slate-900 border border-slate-800 hover:border-amber-400 text-slate-300 text-left transition-colors"
+            >
+              <span className="font-bold text-amber-400 block">SECURITY GUARD</span>
+              <span className="text-[10px] text-slate-400">guard / guard123</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleQuickLogin('it', 'it123')}
               className="p-2 rounded bg-slate-900 border border-slate-800 hover:border-brandInfo text-slate-300 text-left transition-colors"
             >

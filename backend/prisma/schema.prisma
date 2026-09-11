@@ -161,6 +161,7 @@ enum ApprovalRequestType {
   ASSIGNMENT
   TRANSFER
   RETURN_DISPOSITION
+  MAINTENANCE
   MAINTENANCE_COMPLETION
   ASSET_STATUS_CHANGE
   ASSET_DEACTIVATION
@@ -423,6 +424,7 @@ model User {
   siteLaptopsCreated   SiteLaptop[]      @relation("SiteLaptopCreatedByRelation")
   siteLaptopsUpdated   SiteLaptop[]      @relation("SiteLaptopUpdatedByRelation")
   siteLaptopHistories  SiteLaptopHistory[] @relation("SiteLaptopHistoryUserRelation")
+  outsideLaptopsRecorded OutsideLaptopRecord[] @relation("OutsideLaptopRecordedByRelation")
 }
 
 model Department {
@@ -844,6 +846,10 @@ model MaintenanceRecord {
   remarks                String?
   approvedById           String?
   approvedBy             User?             @relation("ApprovedByMaintenanceRelation", fields: [approvedById], references: [id])
+  approvalStatus         String?           @default("PENDING")
+  rejectionReason        String?
+  estimatedCost          Float?
+  approvalRequestId      String?
   departmentId           String?
   department             Department?       @relation(fields: [departmentId], references: [id])
   locationId             String?
@@ -1549,3 +1555,34 @@ model SiteLaptopHistory {
   @@index([siteLaptopId])
   @@index([eventDate])
 }
+
+model OutsideLaptopRecord {
+  id                String    @id @default(uuid())
+  recordCode        String    @unique
+  laptopName        String
+  laptopIdentifier  String
+  personName        String
+  personDetails     String?
+  company           String?
+  contactNumber     String?
+  movementType      String    // "OUT" | "IN"
+  purpose           String
+  destination       String?
+  movementDateTime  DateTime  @default(now())
+  recordedById      String?
+  recordedBy        User?     @relation("OutsideLaptopRecordedByRelation", fields: [recordedById], references: [id], onDelete: SetNull)
+  status            String    @default("OUTSIDE") // "OUTSIDE" | "RETURNED"
+  linkedOutRecordId String?
+  remarks           String?
+  isDeleted         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([recordCode])
+  @@index([laptopIdentifier])
+  @@index([movementType])
+  @@index([status])
+  @@index([movementDateTime])
+  @@index([isDeleted])
+}
+
