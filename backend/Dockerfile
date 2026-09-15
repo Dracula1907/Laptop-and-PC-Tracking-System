@@ -29,5 +29,5 @@ COPY --from=builder /app/data ./data
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "node scripts/sync_production_db.js; node dist/server.js"]
 

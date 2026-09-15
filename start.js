@@ -3,23 +3,27 @@ const http = require('http');
 const net = require('net');
 const path = require('path');
 
-function isPortOpen(port, host = '127.0.0.1') {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    socket.setTimeout(1000);
-    socket.on('connect', () => {
-      socket.destroy();
-      resolve(true);
+function isPortOpen(port) {
+  const tryHost = (host) =>
+    new Promise((resolve) => {
+      const socket = new net.Socket();
+      socket.setTimeout(1000);
+      socket.on('connect', () => {
+        socket.destroy();
+        resolve(true);
+      });
+      socket.on('timeout', () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.on('error', () => {
+        socket.destroy();
+        resolve(false);
+      });
+      socket.connect(port, host);
     });
-    socket.on('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.on('error', () => {
-      resolve(false);
-    });
-    socket.connect(port, host);
-  });
+
+  return tryHost('127.0.0.1').then((open) => (open ? true : tryHost('::1')));
 }
 
 function wait(ms) {
@@ -60,17 +64,17 @@ async function main() {
     console.log('✅ PostgreSQL is already running on port 5432');
   }
 
-  // 1b. Ensure Prisma migrations are deployed
+  // 1b. Ensure Prisma schema and migrations are synchronized
   try {
-    console.log('🔄 Checking database migrations (prisma migrate deploy)...');
-    execSync('npx prisma migrate deploy', {
+    console.log('🔄 Checking and synchronizing database schema (sync_production_db.js)...');
+    execSync('node scripts/sync_production_db.js', {
       cwd: path.join(__dirname, 'backend'),
       stdio: 'inherit',
       shell: true,
     });
     console.log('✅ Database schema is up to date');
   } catch (err) {
-    console.warn('⚠️ Notice: Migration check completed.');
+    console.warn('⚠️ Notice: Schema sync completed with notice.');
   }
 
   // 2. Check Backend on 5000
