@@ -317,6 +317,9 @@ if "%DEPLOY_MODE%"=="DOCKER" (
         echo [NOTICE] Prisma migrate deploy status confirmed; safe schema sync active.
     )
 
+    echo Clearing legacy inventory while preserving users and coexisting projects...
+    docker compose -p %COMPOSE_PROJECT_NAME% run --rm --no-deps -e DATABASE_URL="!DOCKER_DB_URL!" backend node scripts/clear_inventory_only.js >> "%LOG_FILE%" 2>&1
+
     echo Synchronizing official 19-column registry with data/ASSET LIST.xls...
     docker compose -p %COMPOSE_PROJECT_NAME% run --rm --no-deps -e DATABASE_URL="!DOCKER_DB_URL!" backend node scripts/run_official_import.js >> "%LOG_FILE%" 2>&1
     if !ERRORLEVEL! equ 0 (
@@ -344,6 +347,9 @@ if "%DEPLOY_MODE%"=="DOCKER" (
     ) else (
         echo [NOTICE] Prisma migrate deploy status confirmed; safe schema sync active.
     )
+
+    echo Clearing legacy inventory while preserving users and coexisting projects...
+    node scripts/clear_inventory_only.js >> "%LOG_FILE%" 2>&1
 
     echo Synchronizing official 19-column registry with data/ASSET LIST.xls...
     node scripts/run_official_import.js >> "%LOG_FILE%" 2>&1
